@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main(int argc, char **argv)
+{
+    if (argc < 2)
+        return 1;
+
+    int value = atoi(argv[1]);
+
+    if (value != 423)
+    {
+        printf("Error\n");
+    }
+    else
+    {
+        gid_t gid = getegid();
+        uid_t uid = geteuid();
+
+        setresgid(gid, gid, gid);
+        setresuid(uid, uid, uid);
+
+        char *args[] = {"/bin/sh", NULL};
+        execv("/bin/sh", args);
+    }
+
+    return 0;
+}

