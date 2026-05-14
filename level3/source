@@ -26,7 +26,7 @@ Dump of assembler code for function v:
    0x080484a4 <+0>:     push   %ebp // pushes the base pointer of the previous stack frame onto the stack
    0x080484a5 <+1>:     mov    %esp,%ebp // sets the base pointer to the current stack pointer, creating a new stack frame
    0x080484a7 <+3>:     sub    $0x218,%esp // allocates 0x218 (536 in decimal) bytes on the stack for local variables, including the buffer
-   0x080484ad <+9>:     mov    0x8049860,%eax 
+   0x080484ad <+9>:     mov    0x8049860,%eax // 
    0x080484b2 <+14>:    mov    %eax,0x8(%esp)
    0x080484b6 <+18>:    movl   $0x200,0x4(%esp) // sets the second argument for fgets to 512 (0x200 in hexadecimal)
    0x080484be <+26>:    lea    -0x208(%ebp),%eax 
@@ -35,7 +35,7 @@ Dump of assembler code for function v:
    0x080484cc <+40>:    lea    -0x208(%ebp),%eax
    0x080484d2 <+46>:    mov    %eax,(%esp)
    0x080484d5 <+49>:    call   0x8048390 <printf@plt>
-   0x080484da <+54>:    mov    0x804988c,%eax // strores the address of the global variable m in eax
+   0x080484da <+54>:    mov    0x804988c,%eax // strores the address of the global variable m in eax (register)
    0x080484df <+59>:    cmp    $0x40,%eax // 0x40 == 64 in decimal
    0x080484e2 <+62>:    jne    0x8048518 <v+116>
    0x080484e4 <+64>:    mov    0x8049880,%eax
