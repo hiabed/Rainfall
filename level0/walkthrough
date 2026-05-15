@@ -68,6 +68,3 @@ Notes and cautions
 - The binary switches UIDs/GIDs (via `setresuid`/`setresgid`) before `execv` — that affects the privileges of the spawned shell.
 - Only perform these steps in the challenge environment or on systems you control.
 
-If you want, I can also:
-- Add a short one-line usage message to the C source to avoid crashes when called without arguments, or
-- Show a short gdb session highlighting the `cmp $0x1a7,%eax` instruction.
