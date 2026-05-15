@@ -4,9 +4,6 @@
 
 int main(int argc, char **argv)
 {
-    if (argc < 2)
-        return 1;
-
     int value = atoi(argv[1]);
 
     if (value != 423)
@@ -15,11 +12,11 @@ int main(int argc, char **argv)
     }
     else
     {
-        gid_t gid = getegid();
-        uid_t uid = geteuid();
+        gid_t gid = getegid(); // Get the effective group ID of the current process
+        uid_t uid = geteuid(); // Get the effective user ID of the current process
 
-        setresgid(gid, gid, gid);
-        setresuid(uid, uid, uid);
+        setresgid(gid, gid, gid); // Set the real, effective, and saved group IDs to the effective group ID
+        setresuid(uid, uid, uid); // Set the real, effective, and saved user IDs to the effective user ID
 
         char *args[] = {"/bin/sh", NULL};
         execv("/bin/sh", args);
