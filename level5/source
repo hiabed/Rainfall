@@ -13,7 +13,7 @@ void n(void)
 
     fgets(buffer, 512, stdin);
     printf(buffer);
-    exit(0);
+    exit(0); // 0x08049838 is the exit@GOT slot; overwrite it with o() so exit() resolves to o() and spawns a shell when called, the command to verify the exit address is `objdump -R level5 | grep exit` which shows the GOT entry for exit() at 0x08049838, and the command to overwrite it is `python -c "print 'A'*520 + '\x38\x98\x04\x08'"` which fills the buffer with 520 'A' characters followed by the address of the exit@GOT slot in little-endian format.
 }
 
 int main(void)
@@ -21,3 +21,5 @@ int main(void)
     n();
     return (0);
 }
+
+// @plt usually means the function is external and comes from some shared library.

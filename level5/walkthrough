@@ -9,7 +9,6 @@ cat /home/user/level6/.pass
 No RELRO  → GOT (Global Offset Table) is writable
             → we can overwrite function addresses in it
 No PIE    → binary addresses are fixed
-No ASLR   → all addresses predictable and hardcoded
 
 --- What the program does ---
 
@@ -32,7 +31,7 @@ The problem:
 Found via "info functions" in GDB:
 0x080484a4  o
 
-Disassembled:
+Disassembled: (disas o)
    call system("/bin/sh")  ← opens shell
    call _exit(1)
 
