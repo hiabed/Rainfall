@@ -1,0 +1,8 @@
+#include <stdio.h>
+
+int main()
+{
+    int buf[64];
+    gets(buf); // This is unsafe and can lead to buffer overflow
+    return 0;
+}
