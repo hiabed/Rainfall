@@ -1,0 +1,30 @@
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+void n()
+{
+    system("/bin/cat /home/user/level7/.pass");
+}
+
+void m()
+{
+    puts("Nope");
+}
+
+int main(int argc, char **argv)
+{
+    char *buf;
+    void (**fp)();
+
+    buf = malloc(64);      // first heap chunk
+    fp = malloc(4);        // second heap chunk (stores function pointer)
+
+    *fp = m;               // fp points to m()
+
+    strcpy(buf, argv[1]); // vulnerable: no bounds check
+
+    (*fp)();               // call function pointer
+
+    return 0;
+}

