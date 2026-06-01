@@ -33,6 +33,29 @@ Send input longer than 64 bytes to overflow and hijack the return address:
 3. Build payload: `[68 bytes padding] + [4-byte target address]`
 4. Pipe to the binary to trigger execution
 
+High Memory Address (Top of Stack)
++-----------------------------------+
+|  Return Address (EIP pointer)     |  <--- Hidden Paper: Tells CPU where to go next (normally exit/system)
++-----------------------------------+
+|         Saved EBP (4 bytes)       |  <--- Base Pointer: Coordinates local memory tracking
++-----------------------------------+
+|  Compiler Alignment Padding Space |  <--- Extra spacer bytes injected automatically by GCC
++-----------------------------------+
+|   Buffer Space (gets) [64 bytes]  |  <--- The Cup: Where user input fromgets() is safely stored
++-----------------------------------+
+Low Memory Address (Bottom of Stack)
+
++-----------------------------------+
+|  \x44 \x84 \x04 \x08 (Address run)|  <--- Forced Rewrite: The hidden paper now points directly to run()
++-----------------------------------+
+|   Q   Q   Q   Q   Q   Q   Q   Q   |  
++-----------------------------------+
+|   Q   Q   Q   Q   Q   Q   Q   Q   |  <--- 76 Bytes of Junk 'Q' characters used as safe bridge padding
++-----------------------------------+
+|   Q   Q   Q   Q   Q   Q   Q   Q   |  
++-----------------------------------+
+
+
 ## Key Points
 
 - `gets()` is unsafe and removed from modern C — use `fgets()` or `read()` instead
