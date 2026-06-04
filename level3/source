@@ -1,0 +1,27 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+extern FILE *some_file;      // 0x8049860
+extern int m;                // 0x804988c
+extern char *message;        // 0x8049880
+
+void v(void)
+{
+    char buffer[0x208];  // 520 bytes
+
+    fgets(buffer, 0x200, some_file);
+
+    printf(buffer);
+
+    if (m == 0x40)
+    {
+        fwrite(message, 1, 12, stdout);
+        system("/bin/sh");
+    }
+}
+
+int main(void)
+{
+    v();
+    return 0;
+}
