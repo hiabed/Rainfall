@@ -2,23 +2,33 @@
 #include <stdlib.h>
 #include <string.h>
 
-int p(int input) {
-    char buffer[76]; // 0x4c = 76 bytes
+void p(void)
+{
+    char buffer[0x4c];   // 76 bytes (from lea -0x4c(%ebp))
+    int saved_value;
 
-    fflush(stdout); // Ensure all output is flushed before reading input
-    gets(buffer);
+    fflush(stdout);
 
-    void *ret = __builtin_return_address(0); // Get the return address of the current function
-    if (((unsigned int)ret & 0xb0000000) == 0xb0000000) {
-        printf("0x8048620\n");
-        _exit(1);
+    gets(buffer);  // ⚠️ unsafe input
+
+    // equivalent of: mov 0x4(%ebp), %eax
+    saved_value = *(int *)((char *)&buffer + 0x4c + 4);
+    // (conceptually: it's reading caller return-related data)
+
+    // apply bitmask check
+    if ((saved_value & 0xb0000000) == 0xb0000000)
+    {
+        printf("%s", (char *)0x8048620, saved_value);
+        exit(1);
     }
-    puts(buffer);
-    char *dup_str = strdup(buffer);
 
-    return 0; // The original function does not explicitly return a value, assuming 0
+    puts(buffer);
+    strdup(buffer);
 }
 
-int main() {
+int main(void)
+{
+    // stack alignment: and $0xfffffff0, %esp
     p();
+    return 0;
 }
