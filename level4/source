@@ -16,7 +16,7 @@ void n(void)
     fgets(buffer, 512, stdin);
     p(buffer);
 
-    if (m == 0x1025544)
+    if (m == 0x1025544) // this number on decimal is 16909060, which is 0x01020304 in hex, so we need to write 0x01020304 to m
         system("/bin/cat /home/user/level5/.pass");
 }
 
