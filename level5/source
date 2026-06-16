@@ -1,0 +1,22 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+void n(void)
+{
+    char buffer[0x208];   // 520 bytes
+
+    // Read up to 0x200 (512) bytes from stdin
+    fgets(buffer, 0x200, stdin);
+
+    // Print the user input directly
+    printf(buffer);
+
+    // Exit the program
+    exit(1);
+}
+
+int main(void)
+{
+    n();
+    return 0; // Never reached because n() calls exit(1)
+}

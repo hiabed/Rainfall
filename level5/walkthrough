@@ -1,0 +1,163 @@
+
+## 1. Inspecting the program
+after see and test the program we disas the main to see if there's any possibility to reach the bin/sh to get the .pass and here we see there is no calling of function system look at the source code and also there is no posibility to do buffer overflow to overwrite the ret address cause the fgets read in the program just 512 and the buffer can hold 520.
+
+To see the available functions inside the binary with GDB:
+
+```gdb
+info functions
+```
+
+This revealed an interesting function named `o`.
+
+To inspect its assembly:
+
+```gdb
+disas o
+```
+
+The disassembly was:
+
+```asm
+0x080484a4 <+0>:  push   %ebp
+0x080484a5 <+1>:  mov    %esp,%ebp
+0x080484a7 <+3>:  sub    $0x18,%esp
+0x080484aa <+6>:  movl   $0x80485f0,(%esp)
+0x080484b1 <+13>: call   system@plt
+0x080484b6 <+18>: movl   $0x1,(%esp)
+0x080484bd <+25>: call   _exit@plt
+```
+
+## 2. Identifying the command executed by `system`
+
+The first argument passed to `system()` is the pointer `0x080485f0`.
+
+To inspect the string stored at that address:
+
+```gdb
+x/s 0x080485f0
+```
+
+The result was:
+
+```text
+"/bin/sh"
+```
+
+This confirms that the function executes:
+
+```c
+system("/bin/sh");
+```
+
+before terminating the process with `_exit(1)`.
+
+## 3. Reconstructed C source for `o`
+
+A close approximation of the function is:
+
+```c
+#include <stdlib.h>
+#include <unistd.h>
+
+void o(void)
+{
+    system("/bin/sh");
+    _exit(1);
+}
+```
+
+## 4. Reconstructing the `n` function
+
+Disassembling `n` showed that it:
+
+1. Allocates a local stack buffer.
+2. Reads user input with `fgets`.
+3. Passes the user-controlled buffer directly to `printf`.
+4. Exits the program.
+
+so there is a problem the function n exit before program reach the return address that why the stack overflow is NOT possible here
+Equivalent C code:
+
+```c
+void n(void)
+{
+    char buffer[0x208];
+
+    fgets(buffer, 0x200, stdin);
+    printf(buffer);
+    exit(1);
+}
+```
+
+The `main` function simply calls `n`:
+
+```c
+int main(void)
+{
+    n();
+    return 0;
+}
+```
+
+Because `n()` calls `exit(1)`, the `return` statement is never reached.
+
+## 5. Overall control flow
+
+```text
+main()
+    |
+    v
+n()
+    |
+    +--> fgets(buffer, 512, stdin)
+    |
+    +--> printf(buffer)
+    |
+    +--> exit(1)
+
+o()
+    |
+    +--> system("/bin/sh")
+    |
+    +--> _exit(1)
+```
+
+
+
+## 6. Why `printf(buffer)` is important
+
+A safe usage would be:
+
+```c
+printf("%s", buffer);
+```
+
+However, the program uses:
+
+```c
+printf(buffer);
+```
+
+This means the contents of `buffer` are interpreted as the **format string** itself.
+
+For example, if the input contains:
+
+```text
+%x %x %x
+```
+
+`printf` interprets those as format specifiers rather than printing them literally.
+
+
+## 7 GOT entries (Global Offset Table)
+
+after searching about the printf and how it can help us, we found something named GOT entries (Global Offset Table).
+
+A GOT entry is a memory slot used by a program to store the real address of external functions (and some globals) at runtime.
+
+so the exection flow becomes like that 
+
+```bash
+call printf@PLT → jump to GOT entry → real printf()
+```
