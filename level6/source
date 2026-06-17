@@ -1,0 +1,21 @@
+#include <stdlib.h>
+#include <string.h>
+
+void some_function(void);   // located at address 0x08048468
+
+int main(int argc, char **argv)
+{
+    char *buffer;
+    void (**func_ptr)(void);
+
+    buffer = (char *)malloc(64);
+    func_ptr = (void (**)(void))malloc(4);
+
+    *func_ptr = some_function;
+
+    strcpy(buffer, argv[1]);
+
+    (*func_ptr)();
+
+    return 0;
+}
