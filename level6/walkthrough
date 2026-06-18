@@ -79,5 +79,30 @@ but when we see the memory layout of the program when the buffer and the pointer
 0x804a050:      0x08048468      0x00000000      0x00000000      0x00020fa9
 ```
 
-here every address is 4 bytes and we can see that the buffer is located at 0x804a000 and the pointer to the function is located at 0x804a050 so we need to fill the buffer with 80 bytes to reach the pointer to the function.
+here every address is 4 bytes and we can see that the buffer is located at 0x804a000 and the pointer to the function is located at 0x804a050 so we need to fill the buffer with 72 bytes to reach the pointer to the function.
+
+
+but why 72 bytes ?? 
+
+as what you think when you allocate a buffer of 64 bytes the malloc function is allocate just 64 bytes 
+
+let's see what happens behind the scene when we allocate a buffer of 64 bytes using malloc function.
+
+You think : [ 64 bytes buffer ]
+
+But in reality, glibc does: [ HEADER ][ 64 bytes ][ PADDING ]
+
+when we fill 64 of the buffer we found there's is 8 bytes of padding between the buffer and the pointer to the function so we need to fill the buffer with 72 bytes to reach the pointer to the function.
+
+
+the final payload will be:
+
+```bash
+./level6 "$(python -c 'print "A" * 72 + "\x54\x84\x04\x08"')"
+```
+
+where `\x54\x84\x04\x08` is the address of the function n() in little-endian format.
+
+
+
 
