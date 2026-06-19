@@ -1,0 +1,62 @@
+## overview to the program
+
+the program has a while loop that content a printf function that display the the two global variables `auth` and `service` and then it calls the function `fgets` that reads the input from the user and store it in the buffer.
+
+printf with the two global variables auth and service :
+
+```bash
+mov    0x8049ab0,%ecx        ; ecx = service
+mov    0x8049aac,%edx        ; edx = auth
+mov    $0x8048810,%eax       ; eax = format string
+
+mov    %ecx,0x8(%esp)        ; 3rd argument
+mov    %edx,0x4(%esp)        ; 2nd argument
+mov    %eax,(%esp)           ; 1st argument
+
+call   printf@plt
+```
+the function fgets that reads the input from the user and store it in the buffer:
+
+```bash
+mov    $0x8049a90,%eax       ; eax = buffer
+mov    $0x200,%edx          ; edx = 512
+mov    %eax,0x4(%esp)        ; 2nd argument
+mov    %edx,(%esp)           ; 1st argument
+call   fgets@plt
+```
+
+after that we found that the program calling into a while loop that check if the buffer is equal to some stings in a condition and if it is equal to one of the strings it will enter into the if statement.
+
+but the if statement is interesting here is 
+
+```bash
+0x080486b5 <+337>: lea    0x20(%esp), %eax    ; eax = &buffer
+0x080486b9 <+341>: mov    %eax, %edx
+0x080486bb <+343>: mov    $0x804882d, %eax    ; address of "login"
+0x080486c0 <+348>: mov    $0x5, %ecx          ; compare 5 bytes
+0x080486c5 <+353>: mov    %edx, %esi          ; esi = buffer
+0x080486c7 <+355>: mov    %eax, %edi          ; edi = "login"
+0x080486c9 <+357>: repz cmpsb                ; compare bytes
+0x080486cb <+359>: seta   %dl
+0x080486ce <+362>: setb   %al
+0x080486d1 <+365>: mov    %edx, %ecx
+0x080486d3 <+367>: sub    %al, %cl
+0x080486d5 <+369>: mov    %ecx, %eax
+0x080486d7 <+371>: movsbl %al, %eax
+0x080486da <+374>: test   %eax, %eax
+0x080486dc <+376>: jne    0x08048574         ; if not equal, jump away
+```
+cause this is guide us to the next step that when it has another if statement the first if check if `auth + 32` is not equal to `0` and the second is else that print the string `Password:\n`.
+
+the interesting part is that the first if statement check if `auth + 32` is not equal to `0` cause it has a calling of function `system` with argument `/bin/sh`.
+
+```bash
+0x080486e2 <+382>: mov    0x8049aac,%eax    ; eax = auth
+0x080486e7 <+387>: mov    0x20(%eax),%eax   ; eax = auth + 32 
+0x080486ea <+390>: test   %eax,%eax         ; test if auth + 32 is not equal to 0
+0x080486ec <+392>: je     0x080486ff        ; if equal jump to the else statement
+0x080486ee <+394>: movl   $0x8048833,(%esp)         ; argument = "/bin/sh"
+0x080486f5 <+401>: call   0x8048480 <system@plt>    ; call system("/bin/sh")
+```
+
+## 
