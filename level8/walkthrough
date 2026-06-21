@@ -70,4 +70,58 @@ It means that the program is going to check if the value at the memory address `
 
 now we now there is a way to get the shell by entring to the conditions statment.
 
-first we need to make auth pointer point something else that be not null and then we need to make auth + 32 not equal to null(0) and then we can get the shell.
+To execute system("/bin/sh"), two things must be true:
+
+1 - auth must point to valid memory (it must not be NULL).
+2 - The 4-byte integer located at offsets auth + 32 through auth + 35 must be non-zero.
+
+it's like that, we Assume auth points to address 0x1000
+
+```bash
+                    auth
+                      │
+                      ▼
+           Address    Contents
+           ──────────────────────────────────
+0x1000 ──► +------------------------------+
+           | Byte 0                       |
+0x1001     +------------------------------+
+           | Byte 1                       |
+0x1002     +------------------------------+
+           | Byte 2                       |
+0x1003     +------------------------------+
+           | Byte 3                       |
+           |            ...               |
+           |            ...               |
+0x101F     +------------------------------+
+           | Byte 31                      |
+0x1020 ──► +------------------------------+
+           | Byte 32                      | ←\
+0x1021     +------------------------------+   |
+           | Byte 33                      |   | 4 bytes interpreted
+0x1022     +------------------------------+   | as one `int`
+           | Byte 34                      |   |
+0x1023     +------------------------------+ ←/
+           | Byte 35                      |
+           +------------------------------+
+
+```
+
+we can bypass the first condition by making the program enter into the first if statement by making the value of `auth` to be a valid memory address
+
+in this if statement there is : 
+
+```bash
+0x080485eb <+135>:   call   0x8048470 <malloc@plt> ;   call malloc to allocate memory and return a pointer to it in eax
+```
+
+and the second condition can be bypassed by making the value of `auth + 32` to be non-zero, here we found a solution to the problem it by using the command of `service` that it make a call to the function `strdup` and return the pointer to  `service` the global variable.
+after do that the heap will be like that:
+
+```bash
+ 0x804a008 ──► +------------------+      0x804a018 ──► +------------------+
+              | auth chunk (4B)  |                    | service chunk     |
+              | 00 00 00 00      |                    | "AAA ... \0"      |
+              +------------------+                    +-------------------+
+```
+
