@@ -59,4 +59,15 @@ the interesting part is that the first if statement check if `auth + 32` is not 
 0x080486f5 <+401>: call   0x8048480 <system@plt>    ; call system("/bin/sh")
 ```
 
-## 
+## What the condition really means
+
+```bash
+*(int *)(auth + 32) != 0
+```
+It means that the program is going to check if the value at the memory address `auth + 32` is not equal to zero.
+
+## key to the exploitation
+
+now we now there is a way to get the shell by entring to the conditions statment.
+
+first we need to make auth pointer point something else that be not null and then we need to make auth + 32 not equal to null(0) and then we can get the shell.
