@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+
+// this function is used to read a string from stdin and store it in the destination buffer
 void p(char *dest, char *prompt)
 {
     char buffer[4096]; // approx (-0x1008 stack area)
