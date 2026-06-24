@@ -1,0 +1,40 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    // sub $0x40, %esp -> Space allocated on the stack 
+    // lea 0x14(%esp), %eax -> Dest buffer starts at offset 0x14
+    char dest_buffer[40];       // 0x3c - 0x14 = 40 bytes available before count
+    int count;                  // Located at esp + 0x3c
+
+    // 0x0804842d: Get argv[1] and pass to atoi
+    count = atoi(argv[1]);
+
+    // 0x08048441: cmpl $0x9, 0x3c(%esp)
+    if (count > 9) {
+        return 1;               // 0x08048448: mov $0x1, %eax
+    }
+
+    // 0x0804844f - 0x08048453: lea 0x0(,%eax,4), %ecx
+    // Multiplies the count by 4 to get the size in bytes
+    unsigned int copy_size = count * 4;
+
+    // 0x0804845a - 0x08048460: Get argv[2]
+    char *src = argv[2];
+
+    // 0x08048473: call memcpy@plt
+    memcpy(dest_buffer, src, copy_size);
+
+    // 0x08048478: cmpl $0x574f4c46, 0x3c(%esp)
+    // 0x574f4c46 translates straight to "WOLF" in ASCII.
+    // In physical RAM (Little-Endian), "WOLF" must be stored as the bytes: 46 4c 4f 57 ("FLOW")
+    if (count == 0x574f4c46) {
+        // 0x08048499: call execl@plt
+        // Strings at 0x8048583 and 0x8048580 correspond to the command/shell path
+        execl("/bin/sh", "sh", NULL);
+    }
+
+    return 0;
+}
