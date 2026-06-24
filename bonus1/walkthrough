@@ -93,16 +93,6 @@ Result:
 
 =========================================================================================
 
-
-
-
-
-
-
-
-
-
-
 📝 Core Explanation
 Integer Overflow: The input -2147483637 safely bypasses if (count > 9). When multiplied by 4, the 32-bit hardware cuts off the massive overflowed bits, shrinking the value down to exactly 44 inside copy_size.
 
