@@ -9,7 +9,7 @@ public:
 
 	N(int val) : nb(val)   // 108
 	{
-		this->func = &N::operator+; // address shell code    payload: 0x804a010 + "shell code" + padding "aaaaa" + 0x804a00c                
+		this->func = &N::operator+;               
 	}
 	int operator+(N &right)
 	{
@@ -30,7 +30,7 @@ int		main(int ac, char **av)
 	if (ac < 1)
 		_exit(1);
 
-	N *a = new N(5); // create first object [a:aaaaaaaaaaaaaaaaaaaaaaa][aaaaaaab]
+	N *a = new N(5); // create first object
 	N *b = new N(6); // 
 
 	a->setAnnotation(av[1]); // a ------ > b

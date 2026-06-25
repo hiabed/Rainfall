@@ -65,21 +65,7 @@ Final layout:
 [ shellcode   ]
 [ AAAAAAAA... ] → padding to reach overwrite
 [ 0x804a00c ]   → overwritten field in object
-🔥 6. What the program does with it
 
-Assembly logic:
-
-b
- ↓
-read first field → 0x804a00c
- ↓
-dereference → 0x804a010
- ↓
-call → shellcode
-💥 7. Execution result
-shellcode runs
-→ /bin/sh
-→ SUID privilege (bonus0)
 🧠 FINAL SIMPLE SUMMARY
 
 Your payload builds a 2-step pointer chain:
@@ -87,10 +73,6 @@ Your payload builds a 2-step pointer chain:
 0x804a00c → 0x804a010 → shellcode
 
 And uses padding so this chain lands exactly where the program reads memory.
-
-🚀 One-line mental model
-
-👉 “I place shellcode in memory, then I overwrite a field so the program follows a pointer chain that leads to it.”
 
 ======================== get the pass ========================
 
