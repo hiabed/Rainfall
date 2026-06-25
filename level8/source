@@ -1,0 +1,72 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *auth = NULL;
+char *service = NULL;
+
+int main(void)
+{
+    char buffer[128];
+
+    while (1)
+    {
+        // Print current pointers
+        printf("%p, %p\n", auth, service);
+
+        // Read user input
+        if (fgets(buffer, 128, stdin) == NULL)
+            break;
+
+        // -------------------------
+        // auth <string>
+        // -------------------------
+        if (strncmp(buffer, "auth ", 5) == 0)
+        {
+            auth = malloc(4);
+
+            // Initialize first 4 bytes to zero
+            *(int *)auth = 0;
+
+            // Length of text after "auth "
+            if (strlen(buffer + 5) <= 30)
+            {
+                strcpy(auth, buffer + 5);
+            }
+        }
+
+        // -------------------------
+        // reset
+        // -------------------------
+        if (strncmp(buffer, "reset", 5) == 0)
+        {
+            free(auth);
+        }
+
+        // -------------------------
+        // service <string>
+        // -------------------------
+        if (strncmp(buffer, "service", 7) == 0)
+        {
+            service = strdup(buffer + 8);
+        }
+
+        // -------------------------
+        // login
+        // -------------------------
+        if (strncmp(buffer, "login", 5) == 0)
+        {
+            // Read the 32-bit value at auth + 0x20
+            if (*(int *)(auth + 32) != 0)
+            {
+                system("/bin/sh");
+            }
+            else
+            {
+                fwrite("Password:\n", 1, 10, stdout);
+            }
+        }
+    }
+
+    return 0;
+}

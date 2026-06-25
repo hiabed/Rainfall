@@ -1,27 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int		m = 0;
+extern FILE *stdin;
+int m;     // located at 0x8049810
 
-int		p(char *buffer)
+void p(char *str)
 {
-	printf(buffer);
-	return (0);
+    printf(str);
 }
 
-int		n(void)
+void n(void)
 {
-	char	buffer[512];
+    char buffer[520];
 
-	fgets(buffer, 512, stdin);
-	p(buffer);
-	if (m == 16930116)
-		system("/bin/cat /home/user/level5/.pass");
-	return (0);
+    fgets(buffer, 512, stdin);
+    p(buffer);
+
+    if (m == 0x1025544) // this number on decimal is 16909060, which is 0x01020304 in hex, so we need to write 0x01020304 to m
+        system("/bin/cat /home/user/level5/.pass");
 }
 
-int		main(void)
+int main(void)
 {
-	n();
-	return (0);
+    n();
+    return 0;
 }

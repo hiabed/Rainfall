@@ -1,0 +1,24 @@
+#include <stdlib.h>
+#include <string.h>
+
+void m(void)
+{
+    puts("Nope");
+}   // located at address 0x08048468
+
+int main(int argc, char **argv)
+{
+    char *buffer;
+    void (**func_ptr)(void);
+
+    buffer = (char *)malloc(64);
+    func_ptr = (void (**)(void))malloc(4);
+
+    *func_ptr = m;
+
+    strcpy(buffer, argv[1]);
+
+    (*func_ptr)();
+
+    return 0;
+}

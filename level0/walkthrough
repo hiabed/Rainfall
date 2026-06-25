@@ -1,79 +1,70 @@
-    calling the atoi function to convert the av[1] input and the result stored in %eax register (32-bits)
-   0x08048ed4 <+20>:	call   0x8049710 <atoi>
-   "compare the return value of atoi (stored in %eax) with 0x1a7 (423 in decimal) 
-   which determines whether execution follows the success path leading to execv."
-   0x08048ed9 <+25>:	cmp    $0x1a7,%eax
-   0x08048ede <+30>:	jne    0x8048f58 <main+152> -> "if not equal jumps to 0x8048f58 address and skipp the instructions before."
-   0x08048ee0 <+32>:	movl   $0x80c5348,(%esp)
-   0x08048ee7 <+39>:	call   0x8050bf0 <strdup>
-   0x08048eec <+44>:	mov    %eax,0x10(%esp)
-   0x08048ef0 <+48>:	movl   $0x0,0x14(%esp)
-   0x08048ef8 <+56>:	call   0x8054680 <getegid>
-   0x08048efd <+61>:	mov    %eax,0x1c(%esp)
-   0x08048f01 <+65>:	call   0x8054670 <geteuid>
-   0x08048f06 <+70>:	mov    %eax,0x18(%esp)
-   0x08048f0a <+74>:	mov    0x1c(%esp),%eax
-   0x08048f0e <+78>:	mov    %eax,0x8(%esp)
-   0x08048f12 <+82>:	mov    0x1c(%esp),%eax
-   0x08048f16 <+86>:	mov    %eax,0x4(%esp)
-   0x08048f1a <+90>:	mov    0x1c(%esp),%eax
-   0x08048f1e <+94>:	mov    %eax,(%esp)
-   0x08048f21 <+97>:	call   0x8054700 <setresgid>
-   0x08048f26 <+102>:	mov    0x18(%esp),%eax
-   0x08048f2a <+106>:	mov    %eax,0x8(%esp)
-   0x08048f2e <+110>:	mov    0x18(%esp),%eax
-   0x08048f32 <+114>:	mov    %eax,0x4(%esp)
-   0x08048f36 <+118>:	mov    0x18(%esp),%eax
-   0x08048f3a <+122>:	mov    %eax,(%esp)
-   0x08048f3d <+125>:	call   0x8054690 <setresuid>
-   0x08048f42 <+130>:	lea    0x10(%esp),%eax
-   0x08048f46 <+134>:	mov    %eax,0x4(%esp)
----Type <return> to continue, or q <return> to quit---
-   0x08048f4a <+138>:	movl   $0x80c5348,(%esp)
-   0x08048f51 <+145>:	call   0x8054640 <execv> ----> "executes a program with elevated privileges (leading to a shell)"
-   0x08048f56 <+150>:	jmp    0x8048f80 <main+192>
+# How to find the `.pass` file (level1)
 
-   ========================== The address jumped to if "jne" condition met ============================
+This README reproduces the walkthrough content and shows the minimal steps used to find the `.pass` file in the `level1` directory.
 
-   0x08048f58 <+152>:	mov    0x80ee170,%eax
-   0x08048f5d <+157>:	mov    %eax,%edx
-   0x08048f5f <+159>:	mov    $0x80c5350,%eax
-   0x08048f64 <+164>:	mov    %edx,0xc(%esp)
-   0x08048f68 <+168>:	movl   $0x5,0x8(%esp)
-   0x08048f70 <+176>:	movl   $0x1,0x4(%esp)
-   0x08048f78 <+184>:	mov    %eax,(%esp)
-   0x08048f7b <+187>:	call   0x804a230 <fwrite>
-   0x08048f80 <+192>:	mov    $0x0,%eax
-   0x08048f85 <+197>:	leave  
-   0x08048f86 <+198>:	ret    
-End of assembler dump.
+Summary
+- The program reads `argv[1]`, converts it to an integer with `atoi`, and compares the result with the constant `0x1a7` (decimal 423). If they match the program sets IDs and runs a shell; otherwise it prints an error path.
 
-===================================================== switch to level1 user ================================================
+Disassembly excerpt (key part):
 
-level0@RainFall:~$ ./level0 423
+```
+   0x08048ed4 <+20>: call   0x8049710 <atoi>
+   0x08048ed9 <+25>: cmp    $0x1a7,%eax
+   0x08048ede <+30>: jne    0x8048f58 <main+152>
+```
 
-$ pwd
-/home/user/level0
-$ cd ../level1	
-$ pwd
-/home/user/level1
+- `0x1a7` in decimal is `423` (0x1a7 = 256 + 160 + 7 = 423). The program compares `atoi(argv[1])` to `423`.
+
+Reproduce the disassembly and conversion (examples):
+
+```bash
+# Disassemble main with gdb
+gdb -q ./level0
+(gdb) disassemble main
+
+# Or with objdump (intel syntax)
+objdump -d -M intel ./level0 | sed -n '/<main>:/,/ret/p'
+
+# Convert hex immediate to decimal
+printf "%d\n" $((0x1a7))
+python3 -c 'print(0x1a7)'
+```
+
+Steps used to find and read `.pass` (run from `level0`):
+
+```bash
+# 1) Run the program with the numeric argument the binary expects
+./level0 423
+
+# 2) Move to the next level directory
+cd ../level1
+
+# 3) List files to confirm `.pass` exists
+ls -la
+
+# 4) Show the file contents (the password)
+cat .pass
+
+# 5) Use the password value to switch user if needed
+#    (e.g. `su level1` and paste the `.pass` contents when prompted)
+su level1
+```
+
+Walkthrough output example (abridged):
+
+```
+$ ./level0 423
+$ cd ../level1
 $ ls -la
-total 17
-dr-xr-x---+ 1 level1 level1   80 Mar  6  2016 .
-dr-x--x--x  1 root   root    340 Sep 23  2015 ..
--rw-r--r--  1 level1 level1  220 Apr  3  2012 .bash_logout
--rw-r--r--  1 level1 level1 3530 Sep 23  2015 .bashrc
--rwsr-s---+ 1 level2 users  5138 Mar  6  2016 level1
--rw-r--r--+ 1 level1 level1   65 Sep 23  2015 .pass ----> the file containing the level1 password.
--rw-r--r--  1 level1 level1  675 Apr  3  2012 .profile
+... .pass ...
 $ cat .pass
 1fe8a524fa4bec01ca4ea2a869af2a02260d4a7d5fe7e7c24d8617e6dca12d3a
-$ exit
-level0@RainFall:~$ su level1
-Password: paste the .pass content.
-RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE
-No RELRO        No canary found   NX disabled   No PIE          No RPATH   No RUNPATH   /home/user/level1/level1
-level1@RainFall:~$ ls
-level1
-level1@RainFall:~$ pwd
-/home/user/level1
+$ su level1
+Password: <paste the .pass content>
+```
+
+Notes and cautions
+- If the binary requires `argv[1]` and you run it with no arguments, the binary may dereference `argv[1]` which can cause crashes. Always pass the expected argument (here: `423`) when reproducing the walkthrough.
+- The binary switches UIDs/GIDs (via `setresuid`/`setresgid`) before `execv` — that affects the privileges of the spawned shell.
+- Only perform these steps in the challenge environment or on systems you control.
+

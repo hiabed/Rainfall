@@ -1,0 +1,65 @@
+#include <stdio.h>
+
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+
+
+// this function is used to read a string from stdin and store it in the destination buffer
+void p(char *dest, char *prompt)
+{
+    char buffer[4096]; // approx (-0x1008 stack area)
+
+    // 1. print prompt string
+    puts(prompt);
+
+    // 2. read raw input from stdin
+    read(0, buffer, 4096);
+
+    // 3. replace '\n' with '\0'
+    char *newline = strchr(buffer, '\n');
+    if (newline)
+        *newline = '\0';
+
+    // 4. copy only 20 bytes into destination
+    strncpy(dest, buffer, 20);
+}
+
+void pp(char *dest)
+{
+    char first[20];   // starts at ebp-0x30
+    char second[20];  // starts at ebp-0x1c
+
+    // Read the first string
+    p(first, " ");
+
+    // Read the second string
+    p(second, " ");
+
+    // Copy the first string into the destination buffer
+    strcpy(dest, first);
+
+    // Append a two-byte constant stored at 0x80486a4.
+    // In this program, it is most likely a single space:
+    //
+    //     *dest_end = ' ';
+    //     *(dest_end + 1) = '\0';
+    //
+    size_t len = strlen(dest);
+    dest[len] = ' ';      // likely value
+    dest[len + 1] = '\0';
+
+    // Append the second string
+    strcat(dest, second);
+}
+
+int main(void)
+{
+    char buffer[64];
+
+    pp(buffer + 22);
+
+    puts(buffer + 22);
+
+    return 0;
+}
