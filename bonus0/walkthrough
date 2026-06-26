@@ -190,7 +190,7 @@ Saved   |  0x42424242  ← overwritten saved EBP ("BBBB")  |
 EBP     |                                                |
         +------------------------------------------------+
         |                                                |
-buffer  |  int 0x80  ← syscall                           |
+buffer  |  int 0x80  ← syscall   ===> execve             |
         |                                                |
         |  SHELLCODE:                                    |
         |  \x31\xc0\x50\x68\x2f\x2f\x73\x68              |
