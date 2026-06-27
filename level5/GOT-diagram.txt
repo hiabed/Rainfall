@@ -1,0 +1,29 @@
+[ MAIN CODE ]
+     │
+     │ 1. Calls exit()
+     ▼
+┌────────────────────────────────────────┐
+│               exit@plt                 │
+│  1. jmp [GOT_entry] ─────────────────┐ │
+│  2. push 0x0  <────────────────────┐ │ │
+│  3. jmp PLT[0] (Linker) ─────────┐ │ │ │
+└──────────────────────────────────│─│─│─┘
+                                   │ │ │
+     ┌─────────────────────────────┘ │ │
+     │ 3. Jump to Linker             │ │ 2. GOT points back
+     ▼                               │ │    to Instruction 2
+┌─────────────────────────┐          │ │
+│ Dynamic Linker          │          │ │
+│ (_dl_runtime_resolve)   │          │ │
+│                         │          │ │
+│  • Finds exit() in libc │          ▼ │
+│  • OVERWRITES GOT ──────────────►[ GOT Entry ]
+│  • Jumps to libc        │         Holds: Address of Inst #2
+└────────────┬────────────┘
+             │
+             │ 4. Finally executes function
+             ▼
+┌─────────────────────────┐
+│          libc           │
+│   exit() { ... }        │
+└─────────────────────────┘

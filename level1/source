@@ -1,8 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
 
-int main()
-{
-    int buf[64];
-    gets(buf); // This is unsafe and can lead to buffer overflow
+void run() {
+    fwrite("Good... Wait what?\n", 1, 19, stdout);
+    system("/bin/sh");
+}
+
+int main() {
+    char buffer[64];
+    gets(buffer);
     return 0;
 }
