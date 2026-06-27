@@ -67,3 +67,29 @@ An internal crystal oscillator that:
 - Sends out steady electrical pulses
 - Synchronizes all movement of bits through the CPU gates
 - Speed is measured in Gigahertz (GHz)
+
+### ============ STACK PRESENTATION ============
+
+TOP (LOWER ADDRESS)
+
+------------------------------------------------+
+C()                                             |
+------------------------------------------------|
+B()                                             |
+------------------------------------------------|
+A()                                             |
+------------------------------------------------|
+MAIN''S STACK FRAME                             |
+------------------------------------------------|
+4- LOCAL VARIABLES (int a, char buffer[64],...) |
+                                                |
+3- SAVED EBP                                    |
+                                                |
+2- RETURN ADDRESS                               |
+                                                |
+1- FUNCTION ARGUMENTS                           |
+------------------------------------------------|
+MAIN()                                          |
+------------------------------------------------+
+
+BOTTOM (HIGH ADDRESSES)
