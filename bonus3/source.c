@@ -5,7 +5,6 @@
 
 int main(int ac, char **av)
 {
-	int ret;
 	char buffer[132];    // 0x9c - 0x18
 	FILE *f = fopen("/home/user/end/.pass", "r");
 
@@ -15,8 +14,8 @@ int main(int ac, char **av)
 	else
 	{
 		fread(buffer, 1, 66, f);
-		buffer[65] = 0;
-		buffer[atoi(av[1])] = 0;
+		buffer[65] = 0; // the whole password copied 
+		buffer[atoi(av[1])] = 0; // 11111111111111\0
 		fread(&buffer[66], 1, 65, f);
 		fclose(f);
 

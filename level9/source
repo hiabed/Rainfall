@@ -30,9 +30,9 @@ int		main(int ac, char **av)
 	if (ac < 1)
 		_exit(1);
 
-	N *a = new N(5); // create first object
-	N *b = new N(6); // 
+	N *a = new N(5); // create first object [a][b]
+	N *b = new N(6); //  
 
 	a->setAnnotation(av[1]); // a ------ > b
-	return (b->*(0))(*a);
+	return (b->*(0))(*a);   // --> ptr1 -> ptr2 -> shellcode.
 }

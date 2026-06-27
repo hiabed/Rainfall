@@ -53,6 +53,10 @@ EBP and return address don’t move                           |
 They stay at higher addresses                               |
 -------------------------------------------------------------
 
+ps: It feels completely backward, doesn''t it? In the real world, 
+when you stack plates, the "top" gets higher and higher in the air. 
+But in computer architecture, the top of the stack is at a lower numerical memory address.
+
 === Exploit Calculation ===
 
 To reach return address:
@@ -86,10 +90,6 @@ Shellcode injection is also a valid solution here
 since NX is disabled for this binary.
 ret2func was chosen for simplicity.
 
-
-
-
-
 =================================== steps to verify calculation ================================
 
 Step 1 — set breakpoint BEFORE running:
@@ -97,9 +97,9 @@ bash(gdb) break main
 You should see:
 Breakpoint 1 at 0x08048483
 
-Step 2 — now run:
+Step 2 — now run the program:
 bash(gdb) run
-Program will STOP at main — you'll see:
+Program will STOP at main — you''ll see:
 Breakpoint 1, 0x08048483 in main ()
 
 step3: 
@@ -114,3 +114,29 @@ bash(gdb) info registers esp ebp
 
 Step 4 — view stack memory:
 bash(gdb) x/80x $esp
+
+=============== STACK PRESENTATION ===============
+
+TOP (LOWER ADDRESS)
+
+------------------------------------------------+
+C()                                             |
+------------------------------------------------|
+B()                                             |
+------------------------------------------------|
+A()                                             |
+------------------------------------------------|
+MAIN''S STACK FRAME                             |
+------------------------------------------------|
+4- LOCAL VARIABLES (int a, char buffer[64],...) |
+                                                |
+3- SAVED EBP                                    |
+                                                |
+2- RETURN ADDRESS                               |
+                                                |
+1- FUNCTION ARGUMENTS                           |
+------------------------------------------------|
+MAIN()                                          |
+------------------------------------------------+
+
+BOTTOM (HIGH ADDRESSES)
