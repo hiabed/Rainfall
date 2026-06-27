@@ -1,0 +1,34 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+char	c[68];
+
+void	m(void)
+{
+	printf("%s - %d\n", c, (int)time(0));
+}
+
+int		main(int ac, char **av)
+{
+	int		*a;
+	int		*b;
+
+	a = malloc(8); // allocate 8 bytes for a[0] and a[1].
+	a[0] = 1; // uses 4 bytes of the allocated memory for a[0].
+	a[1] = (int)malloc(8); // uses the remaining 4 bytes for a[1], which points to another allocated memory of 8 bytes.
+
+	b = malloc(8);
+	b[0] = 2;
+	b[1] = (int)malloc(8);
+
+	strcpy((char *)a[1], av[1]);
+	strcpy((char *)b[1], av[2]);
+	
+	fgets(c, 68, fopen("/home/user/level8/.pass", "r")); // reads the content of the file into the buffer c, which can hold up to 68 characters.
+
+	puts("~~");
+
+	return (0);
+}

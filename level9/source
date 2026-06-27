@@ -1,0 +1,38 @@
+#include <unistd.h>
+#include <cstring>
+
+class N {
+public:
+	int nb; // offset 0 -> 4 bytes
+	int (N::*func)(N &); // offset 4 -> 4 bytes
+	char annotation[100]; // 
+
+	N(int val) : nb(val)   // 108
+	{
+		this->func = &N::operator+;               
+	}
+	int operator+(N &right)
+	{
+		return this->nb + right.nb;
+	}
+	int operator-(N &right)
+	{
+		return this->nb - right.nb;
+	}
+	void setAnnotation(char *str)
+	{
+		memcpy(this->annotation, str, strlen(str)); // -> 
+	}
+};
+
+int		main(int ac, char **av)
+{
+	if (ac < 1)
+		_exit(1);
+
+	N *a = new N(5); // create first object [a][b]
+	N *b = new N(6); //  
+
+	a->setAnnotation(av[1]); // a ------ > b
+	return (b->*(0))(*a);   // --> ptr1 -> ptr2 -> shellcode.
+}

@@ -1,0 +1,101 @@
+=========================================================================================
+                                BONUS1 EXPLOIT WALKTHROUGH
+=========================================================================================
+
+[1] THE CRITICAL VULNERABILITY: INTEGER OVERFLOW
+-----------------------------------------------------------------------------------------
+The program attempts to protect itself by checking if the user-supplied count is greater 
+than 9. However, it handles calculations inconsistently across signed and unsigned types.
+
+1. PASSING THE GUARD:
+   We provide a deeply negative number: -2147483637. 
+   Since (-2147483637 > 9) is FALSE, the safety check is successfully bypassed.
+
+2. THE TRUNCATION MATHEMATICS:
+   The program computes: copy_size = count * 4
+   -2147483637 * 4 = -8,589,934,548
+
+   Because a 32-bit integer cannot hold a value this large,so it gets truncated to its lowest 32 bits.
+
+   BINARY REPRESENTATION TRUNCATION:
+   -8,589,934,548:
+   11111111 11111111 11111111 11111110 00000000 00000000 00000000 00101100
+   [ DISCARDED / IGNORED BY CPU ]      [=== KEPT LOWEST 32-BITS ===]
+                                       00000000 00000000 00000000 00101100
+
+   When this truncated 32-bit value is interpreted as an UNSIGNED INTEGER (copy_size), 
+   it creates a small, usable positive value: 44.
+
+   Result: `memcpy` is instructed to copy exactly 44 bytes into a 40-byte buffer.
+
+
+[2] THE ATTACK VECTOR: STACK MEMORY OVERFLOW
+-----------------------------------------------------------------------------------------
+Because `copy_size` becomes 44, the `memcpy` function writes 4 bytes past the bounds 
+of `dest_buffer`, and directly overwriting the adjacent `count` variable.
+
+VISUAL MEMORY LAYOUT (STACK):
+
+         High Memory Addresses
+         +--------------------------+
+         | ... Saved EBP            |
+         +--------------------------+
+  +----> | count                    |  <-- Target Variable (4 Bytes)
+  |      +--------------------------+
+
+  |      | dest_buffer[39]          |  \
+  |      | ...                      |   \
+  |      | dest_buffer[1]           |    +-- Buffer Space (40 Bytes)
+  |      | dest_buffer[0]           |   /
+  |      +--------------------------+  /
+  |      Low Memory Addresses
+  |
+  |
+  +--- EXPLOIT EXECUTION FLOW:
+       1. Payload starts filling `dest_buffer` with 40 'A' characters.
+       2. The buffer is completely filled.
+       3. The remaining 4 bytes of payload spill over the boundary.
+       4. The value of `count` is forcefully rewritten.
+
+
+[3] THE BYTE-ORDER MATRIX (LITTLE-ENDIAN SANITY CHECK)
+-----------------------------------------------------------------------------------------
+The program validates success via the check: `if (count == 0x574f4c46)` // "WOLF"
+
+Because x86/x64 architecture uses Little-Endian byte ordering, the lowest value byte 
+must be written first in memory. To load the integer 0x574F4C46 into the register, 
+the bytes must physically exist in reverse order inside the payload string:
+
+         DESIRED INTEGER VALUE:      0x 57 4F 4C 46   (W O L F)
+
+                                        |  |  |  |
+         LITTLE-ENDIAN STORAGE:         46 4C 4F 57   (F L O W)
+
+                                        |  |  |  |
+         EXPLOIT PAYLOAD STRING:       \x46\x4c\x4f\x57
+
+
+[4] EXPLOIT COMMAND & EXECUTION
+-----------------------------------------------------------------------------------------
+Command:
+./bonus1 -2147483637 $(python -c 'print "A"*40 + "\x46\x4c\x4f\x57"')
+
+Result:
+- The 40 'A's fill `dest_buffer`.
+- "\x46\x4c\x4f\x57" overwrites `count` with 0x574f4c46.
+- The state evaluation condition matches perfectly, spawning the target shell.
+
+==> bonus1@RainFall:~$ ./bonus1 -2147483637 $(python -c 'print "A"*40 + "\x46\x4c\x4f\x57"')
+    $ pwd          
+    /home/user/bonus1
+    $ cat /home/user/bonus2/.pass
+    579bd19263eb8655e4cf7b742d75edf8c38226925d78db8163506f5191825245
+
+=========================================================================================
+
+📝 Core Explanation
+Integer Overflow: The input -2147483637 safely bypasses if (count > 9). When multiplied by 4, the 32-bit hardware cuts off the massive overflowed bits, shrinking the value down to exactly 44 inside copy_size.
+
+Buffer Overflow: The program copies 44 bytes into a 40-byte buffer (dest_buffer). The extra 4 bytes overflow directly into the adjacent count variable on the stack.
+
+Little-Endian Flip: The C code checks if count == 0x574f4c46 (ASCII for WOLF). Because x86 architecture reads memory integers backward, we send the bytes reversed as FLOW (\x46\x4c\x4f\x57) so they flip back into WOLF inside the CPU register.

