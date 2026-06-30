@@ -4,15 +4,15 @@
 
 void p(void)
 {
-    char buffer[0x4c];   // 76 bytes (from lea -0x4c(%ebp))
+    char buffer[76];   // 76 bytes (from lea -0x4c(%ebp))
     int saved_value;
 
     fflush(stdout);
 
-    gets(buffer);  // ⚠️ unsafe input
+    gets(buffer);  // unsafe input
 
     // equivalent of: mov 0x4(%ebp), %eax
-    saved_value = *(int *)((char *)&buffer + 0x4c + 4);
+    saved_value = *(int *)((char *)&buffer + 76 + 4);
     // (conceptually: it's reading caller return-related data)
 
     // apply bitmask check
